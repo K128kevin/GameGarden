@@ -56,7 +56,7 @@ vi.mock("@/services/ai", () => ({
             accountRef: a.ref,
             title: "Share a GIF",
             rationale: "Show progress",
-            draftText: "New dash mechanic!",
+            draftText: "New dash mechanic — feels great!",
             draftTitle: "",
             community: "",
             link: "",
@@ -159,6 +159,8 @@ describe("growth plan flow", () => {
     const reply = recs.find((x) => x.title === "Thank the commenter")!;
     expect(reply.kind).toBe("reply");
     expect(reply.target?.externalId).toBe("i1");
+    const gif = recs.find((x) => x.title === "Share a GIF")!;
+    expect(gif.draftText).toBe("New dash mechanic, feels great!"); // em dash stripped
     const bad = recs.find((x) => x.title === "Join a conversation")!;
     expect(bad.kind).toBe("engage"); // invalid target downgraded
     expect(bad.suggestedFor!.getTime()).toBeGreaterThan(Date.now()); // invalid time clamped to future

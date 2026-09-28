@@ -23,6 +23,7 @@ import {
 import { getConnector } from "@/platforms/registry";
 import { truncate, type DiscoveredPost } from "@/platforms/types";
 import { normalizeSubreddit } from "@/platforms/reddit";
+import { cleanDraft } from "@/lib/drafts";
 import { formatDateTime, slotLabelFromId } from "@/lib/time";
 import { accountContext, syncAccount } from "./accounts";
 import { generatePlanUpdate, type PlanOutputT } from "./ai";
@@ -376,8 +377,8 @@ async function persistOutput(
       kind,
       title: r.title,
       rationale: r.rationale,
-      draftText: r.draftText || null,
-      draftTitle: r.draftTitle || null,
+      draftText: cleanDraft(r.draftText),
+      draftTitle: cleanDraft(r.draftTitle),
       community: r.community ? normalizeSubreddit(r.community) : null,
       link: r.link || null,
       target,
