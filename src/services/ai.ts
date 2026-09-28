@@ -89,7 +89,6 @@ export async function generatePlanUpdate(context: unknown): Promise<{
     fallbacks: "default",
     thinking: { type: "adaptive" },
     output_config: { effort: "high", format: betaZodOutputFormat(PlanOutput) },
-    cache_control: { type: "ephemeral" },
     system: SYSTEM_PROMPT,
     messages: [
       {
