@@ -66,7 +66,7 @@ Check that it's free by visiting it: a Vercel 404 "DEPLOYMENT_NOT_FOUND" page me
 ## 4. Create the database (Neon)
 
 1. Sign up at <https://neon.tech> (the free plan is enough).
-2. **Create project**: name `gamegarden`, Postgres 16 or 17, region **AWS US East 1 (N. Virginia)**.
+2. **Create project**: name `gamegarden`, Postgres 16 or 17, region **AWS US East 1 (N. Virginia)**. AWS US East 2 (Ohio) is fine too; just match it with Vercel's Cleveland (`cle1`) function region in §6.
 3. On the project dashboard, click **Connect** and copy two connection strings:
    - **Pooled** (host contains `-pooler`) → this becomes `DATABASE_URL`.
    - **Direct** (toggle "Connection pooling" off) → this becomes `DATABASE_URL_UNPOOLED`, which migrations use.
@@ -166,7 +166,7 @@ Until then, leave the Reddit variables unset. The Accounts page will show Reddit
 
 - **Production branch**: *Settings → Environments → Production*. Make sure the branch is `main`.
 - **Fluid compute**: *Settings → Functions*. Confirm it's **enabled**; it's the default for new projects. Without it, Hobby functions stop after 60 s and plan runs will time out.
-- **Function region**: *Settings → Functions → Function Region*. Choose **Washington, D.C. (iad1)** to sit next to Neon us-east-1.
+- **Function region**: *Settings → Functions → Function Region*. Pick the region that matches your Neon project: **Washington, D.C. (iad1)** for AWS us-east-1, or **Cleveland (cle1)** for AWS us-east-2 (Ohio). Redeploy afterwards; region changes only apply to new deployments.
 - **Preview deployments**: previews run migrations too, and sign-in won't work on preview URLs because they aren't registered with Google. Recommended: *Settings → Git → Ignored Build Step → "Only build production"*. If that option isn't offered, use a custom command:
 
   ```bash
