@@ -299,7 +299,7 @@ GameGarden already keeps each user's data separate. When you're ready to let oth
 | Reddit 401/403 after connecting | The app isn't approved yet, or `REDDIT_USER_AGENT` doesn't follow the `web:name:version (by /u/you)` format. |
 | Bluesky "login failed" | The app password was revoked or mistyped. Create a new one and reconnect. |
 | All connected accounts suddenly error | `ENCRYPTION_KEY` changed. Restore the original value, or reconnect every account. |
-| Scheduled posts go out late | The pinger isn't running. Check the cron-job.org execution history (§7). |
+| Scheduled post stays "scheduled" after its time | Nothing is calling the heartbeat often enough. Vercel's free cron only runs around 9 AM and 9 PM ET, so set up cron-job.org (§7). The **Schedule** page shows a warning saying whether no heartbeat has arrived or calls are being rejected for a wrong `CRON_SECRET`. In the meantime, due posts go out when you open GameGarden, and overdue items have a **Post now** button. |
 | Steam/itch.io stats missing | Click **Refresh store data** on the game page; the error explains what failed (e.g. the store page isn't public yet). |
 
 ---

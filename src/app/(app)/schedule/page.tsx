@@ -2,7 +2,8 @@ import { and, asc, desc, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import { games, scheduledActions, socialAccounts } from "@/db/schema";
 import { getUserSettings, requireUser } from "@/lib/session";
-import { formatDateTime, formatRelative, toLocalInput } from "@/lib/time";
+import { formatDateTime, formatRelative, msFromNow, toLocalInput } from "@/lib/time";
+import { HeartbeatNotice } from "@/components/heartbeat-notice";
 import { ScheduledControls } from "@/components/scheduled-item";
 import { Badge, btn, EmptyState, ExternalLink, Link, PageHeader, PlatformBadge, StatusBadge } from "@/components/ui";
 
@@ -25,8 +26,14 @@ export default async function SchedulePage() {
     .orderBy(desc(scheduledActions.scheduledFor))
     .limit(30);
 
+  // Give the heartbeat a few minutes of slack before calling something overdue.
+  const overdueCutoff = msFromNow(-10 * 60_000);
+  const isOverdue = (a: (typeof upcoming)[number]) => a.status === "scheduled" && a.scheduledFor < overdueCutoff;
+  const overdueCount = upcoming.filter(isOverdue).length;
+
   const Row = ({ a }: { a: (typeof upcoming)[number] }) => {
     const acct = accts.get(a.accountId);
+    const overdue = isOverdue(a);
     return (
       <li className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -36,6 +43,7 @@ export default async function SchedulePage() {
           {a.payload.community && <Badge color="amber">r/{a.payload.community}</Badge>}
           {a.gameId && gameNames.get(a.gameId) && <Badge color="violet">{gameNames.get(a.gameId)}</Badge>}
           <StatusBadge status={a.status} />
+          {overdue && <Badge color="amber">overdue</Badge>}
           <span className="ml-auto text-xs text-zinc-400">
             {formatDateTime(a.publishedAt ?? a.scheduledFor, tz)} ({formatRelative(a.publishedAt ?? a.scheduledFor)})
           </span>
@@ -60,6 +68,7 @@ export default async function SchedulePage() {
           text={a.payload.text}
           title={a.payload.title ?? null}
           whenLocal={toLocalInput(a.scheduledFor, tz)}
+          overdue={overdue}
         />
       </li>
     );
@@ -76,6 +85,9 @@ export default async function SchedulePage() {
           </Link>
         }
       />
+      <div className="mb-6 empty:hidden">
+        <HeartbeatNotice overdueCount={overdueCount} />
+      </div>
       <h2 className="mb-3 text-sm font-semibold text-zinc-100">Upcoming</h2>
       {upcoming.length ? (
         <ul className="mb-8 space-y-3">

@@ -249,3 +249,44 @@ describe("growth plan flow", () => {
     expect(kept.status).toBe("scheduled");
   });
 });
+
+describe("heartbeat and catch-up publishing", () => {
+  it("tracks heartbeat calls and rejections", async () => {
+    const { clearRejectedTick, heartbeatStatus, recordRejectedTick, recordTick } = await import("@/services/heartbeat");
+    await db.delete((await import("@/db/schema")).systemState);
+    expect((await heartbeatStatus()).healthy).toBe(false);
+
+    await recordRejectedTick("bad_secret");
+    let hb = await heartbeatStatus();
+    expect(hb.lastRejected?.reason).toBe("bad_secret");
+    expect(hb.healthy).toBe(false);
+
+    await recordTick("vercel-cron");
+    expect((await heartbeatStatus()).healthy).toBe(false); // daily Vercel cron alone isn't enough
+
+    await recordTick("external");
+    hb = await heartbeatStatus();
+    expect(hb.healthy).toBe(true);
+    expect(hb.lastExternal).not.toBeNull();
+    await clearRejectedTick();
+    expect((await heartbeatStatus()).lastRejected).toBeNull();
+  });
+
+  it("publishes only the given user's due items", async () => {
+    const otherId = `other-${Date.now()}`;
+    await db.insert(user).values({ id: otherId, name: "Other", email: `${otherId}@example.com` });
+    const otherAcct = await upsertConnectedAccount(otherId, "fakebook", { externalId: "ext-2", handle: "other", credentials: {} });
+    const mine = await createApprovedAction({ userId, accountId, payload: { kind: "post", text: "mine" }, scheduledFor: new Date(Date.now() - 60_000) });
+    const theirs = await createApprovedAction({
+      userId: otherId,
+      accountId: otherAcct.id,
+      payload: { kind: "post", text: "theirs" },
+      scheduledFor: new Date(Date.now() - 60_000),
+    });
+    const results = await publishDueActions(Date.now() + 10_000, { userId });
+    expect(results.map((r) => r.id)).toEqual([mine.id]);
+    const [t] = await db.select().from(scheduledActions).where(eq(scheduledActions.id, theirs.id));
+    expect(t.status).toBe("scheduled");
+    await db.delete(user).where(eq(user.id, otherId));
+  });
+});
