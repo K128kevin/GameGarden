@@ -284,6 +284,7 @@ GameGarden already keeps each user's data separate. When you're ready to let oth
 | --- | --- |
 | Build fails at `drizzle-kit migrate` | `DATABASE_URL` / `DATABASE_URL_UNPOOLED` isn't set for that environment (often a preview build). Set the variables, or skip preview builds (§6). |
 | Google says `Error 400: redirect_uri_mismatch` | The redirect URI must match exactly: `https`, no trailing slash, same domain as `BETTER_AUTH_URL`. |
+| Clicking "Sign in with Google" does nothing; the browser's network tab shows 403 `Invalid origin` | The address you're on doesn't match `BETTER_AUTH_URL`. Open the production URL (not a deployment-specific `…-<hash>-….vercel.app` URL; production now redirects those automatically), or fix `BETTER_AUTH_URL` (e.g. it's still `http://localhost:3000`) and **redeploy**. The sign-in page shows a warning explaining which of these it is. |
 | Sign-in returns to the home page with an error | Your email isn't in `ALLOWED_EMAILS`, or `BETTER_AUTH_URL` doesn't match the URL you're using. |
 | `/api/cron/tick` returns 401 | The header must be exactly `Authorization: Bearer <CRON_SECRET>`, matching Vercel's value. |
 | Plan run failed: `ANTHROPIC_API_KEY is not set`, 401, or credit errors | Check the key in Vercel (then redeploy) and your Anthropic billing and limits. |
