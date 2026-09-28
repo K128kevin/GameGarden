@@ -36,7 +36,9 @@ There is one idempotent heartbeat endpoint, `GET /api/cron/tick` (it needs `Auth
 Scheduled posts go out on the next tick after their time. On Vercel Hobby the only built-in ticks are the four above, so to publish on time, add a free pinger that calls the tick every 5–15 minutes:
 
 - **cron-job.org** (recommended, free): create a job for `https://YOUR-APP/api/cron/tick` every 5 minutes with the header `Authorization: Bearer YOUR_CRON_SECRET`.
-- **GitHub Actions**: `.github/workflows/tick.yml` is included. It is disabled until you set the repo variable `ENABLE_TICK=true`, the variable `APP_URL`, and the secret `CRON_SECRET`. On private repos this uses about 2,900 Actions minutes a month at a 15-minute interval, which is more than the free 2,000.
+- **GitHub Actions**: `.github/workflows/tick.yml` is included. It's free on public repos and disabled until you set the repo variable `ENABLE_TICK=true`, the variable `APP_URL`, and the secret `CRON_SECRET`.
+
+The tick publishes due posts and then responds right away; planning runs continue in the background (`after()`), so pingers with short timeouts work fine.
 
 When you opt an account or game in, the first plan is generated right away. After that, updates arrive with the scheduled runs, or whenever you click **Run analysis now**.
 
@@ -50,18 +52,14 @@ When you opt an account or game in, the first plan is generated right away. Afte
 
 ## Deploying (free)
 
-1. **Database:** create a free Postgres on [Neon](https://neon.tech) or [Supabase](https://supabase.com) and copy the pooled connection string.
-2. **Google OAuth** ([console.cloud.google.com](https://console.cloud.google.com)):
-   - Create an OAuth client (type *Web application*).
-   - Authorized redirect URIs:
-     - `https://YOUR-APP/api/auth/callback/google` (sign-in)
-     - `https://YOUR-APP/api/connect/youtube/callback` (YouTube connection)
-     - plus the same two with `http://localhost:3000` for local development.
-   - Enable **YouTube Data API v3** for the project. While the consent screen is in *Testing*, add yourself as a test user.
-3. **Reddit (optional):** at <https://www.reddit.com/prefs/apps> create a **web app** with redirect URI `https://YOUR-APP/api/connect/reddit/callback`.
-4. **Claude:** get an API key at <https://console.anthropic.com>.
-5. **Vercel:** import this repo, add the variables from `.env.example`, and deploy. The `vercel-build` script runs database migrations before `next build`. Set `BETTER_AUTH_URL` to your production URL.
-6. Add the external pinger described in [How scheduling works](#how-scheduling-works).
+**Full step-by-step guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).** It covers Neon, Google OAuth and YouTube, Claude, Reddit approval, Vercel settings, the heartbeat pinger, a first-run checklist, costs, and troubleshooting.
+
+Short version:
+1. Create a Neon Postgres database (pooled URL → `DATABASE_URL`, direct URL → `DATABASE_URL_UNPOOLED`).
+2. Create a Google OAuth web client with redirect URIs `APP_URL/api/auth/callback/google` and `APP_URL/api/connect/youtube/callback`. Enable YouTube Data API v3, and **publish** the consent screen so tokens don't expire after 7 days.
+3. Create a Claude API key and set a spend limit.
+4. Import the repo into Vercel, set the build command to `npm run vercel-build`, and add the variables from `.env.example`.
+5. Point cron-job.org at `APP_URL/api/cron/tick` every 5 minutes with `Authorization: Bearer $CRON_SECRET`.
 
 **Cost:** each plan run is one Claude call, typically 15–30k input tokens and 4–8k output tokens. With the default `claude-opus-5` that is roughly $0.25–0.35 per run, so about $15–20 a month per active plan at two runs a day. Set `ANTHROPIC_MODEL=claude-sonnet-5` to cut that by more than half. Requests enable Anthropic's server-side refusal fallback (`fallbacks: "default"`).
 
