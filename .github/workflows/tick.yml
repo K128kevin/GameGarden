@@ -1,0 +1,25 @@
+# Optional heartbeat so scheduled posts publish within ~15 minutes of their time.
+# Vercel's free (Hobby) cron can only run once per day per job, which covers the
+# 9 AM / 9 PM ET planning runs but not arbitrary scheduled posts.
+#
+# Setup: Settings → Secrets and variables → Actions
+#   secrets:   CRON_SECRET (same value as the app's env var)
+#   variables: APP_URL (e.g. https://gamegarden.vercel.app), ENABLE_TICK=true
+#
+# Note: on private repos each run bills 1 Actions minute (~2,900/month at */15),
+# which exceeds the 2,000 free minutes. For private repos prefer a free external
+# pinger such as cron-job.org (see README), or raise the interval.
+name: tick
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+jobs:
+  tick:
+    if: vars.ENABLE_TICK == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Call tick endpoint
+        run: |
+          curl -fsS --max-time 320 -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ vars.APP_URL }}/api/cron/tick"
