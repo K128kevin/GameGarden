@@ -1,14 +1,19 @@
 import { and, eq, isNotNull, or, isNull, sql } from "drizzle-orm";
+import { after } from "next/server";
 import { db } from "@/db";
 import { plans, recommendations, scheduledActions } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { SignOutButton } from "@/components/auth-buttons";
 import { NavLinks } from "@/components/nav";
+import { publishDueForUser } from "@/services/publisher";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  // Backstop for a missing/late heartbeat: whenever you open the app, publish
+  // any of your already-approved scheduled items whose time has passed.
+  after(() => publishDueForUser(user.id));
   const [updated] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(plans)

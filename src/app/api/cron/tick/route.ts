@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { currentPlanSlot } from "@/lib/time";
 import { runScheduledSlot } from "@/services/planner";
+import { recordRejectedTick, recordTick, tickSource } from "@/services/heartbeat";
 import { publishDueActions } from "@/services/publisher";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +20,14 @@ export const maxDuration = 300;
 async function handle(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // Remember the rejection so the app can explain why scheduled posts aren't going out.
+    await recordRejectedTick(secret ? "bad_secret" : "missing_secret_env").catch(() => {});
+    return NextResponse.json(
+      { error: secret ? "unauthorized: send the header 'Authorization: Bearer <CRON_SECRET>'" : "CRON_SECRET is not set on the server" },
+      { status: 401 },
+    );
   }
+  await recordTick(tickSource(req));
 
   const started = Date.now();
   const published = await publishDueActions(started + 20_000);

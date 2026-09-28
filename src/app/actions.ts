@@ -362,6 +362,25 @@ export async function updateScheduled(id: string, _prev: ActionState, fd: FormDa
   }
 }
 
+/** Publish a scheduled item immediately instead of waiting for its time (explicit user click = approval). */
+export async function publishScheduledNow(id: string): Promise<ActionState> {
+  const user = await requireUser();
+  try {
+    const a = await ownedAction(user.id, id);
+    if (a.status !== "scheduled") return { error: `Can't post an item that is ${a.status}.` };
+    await db
+      .update(scheduledActions)
+      .set({ scheduledFor: new Date(), approvedAt: new Date() })
+      .where(and(eq(scheduledActions.id, a.id), eq(scheduledActions.status, "scheduled")));
+    const r = await executeAction(a.id);
+    revalidatePath("/", "layout");
+    if (!r) return { error: "It's already being published." };
+    return r.status === "published" ? { ok: "Posted!" } : { error: r.error ?? "Publishing failed" };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /** Retry a failed item right now (explicit user click = approval). */
 export async function retryScheduled(id: string): Promise<ActionState> {
   const user = await requireUser();

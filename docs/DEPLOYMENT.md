@@ -15,7 +15,7 @@ Budget about an hour. Most of it is clicking through the Google Cloud console. D
 | App URL | `https://<project>.vercel.app` to start | Stable and free. A custom domain can come later (see §10). |
 | Production branch | **`main`** | Keep production separate from the `claude/...` work branch. |
 | Scheduler | Vercel Cron (built in) **+ cron-job.org every 5 min** | Vercel Hobby cron runs each job only once a day. The pinger makes scheduled posts go out within about 5 minutes of their time. |
-| AI model | Default **`claude-opus-5`**, with a spending limit set in the Anthropic console | Best-quality strategy. Set `ANTHROPIC_MODEL=claude-sonnet-5` later if cost matters more (§9). |
+| AI model | Default **`claude-opus-5-5`** (Claude Opus 5.5), with a spending limit set in the Anthropic console | Best-quality strategy. Set `ANTHROPIC_MODEL=claude-sonnet-5` later if cost matters more (§9). |
 | Access | `ALLOWED_EMAILS=<your Gmail>` | Keeps the instance personal until you're ready to open it up. |
 
 ---
@@ -66,7 +66,7 @@ Check that it's free by visiting it: a Vercel 404 "DEPLOYMENT_NOT_FOUND" page me
 ## 4. Create the database (Neon)
 
 1. Sign up at <https://neon.tech> (the free plan is enough).
-2. **Create project**: name `gamegarden`, Postgres 16 or 17, region **AWS US East 1 (N. Virginia)**.
+2. **Create project**: name `gamegarden`, Postgres 16 or 17, region **AWS US East 1 (N. Virginia)**. AWS US East 2 (Ohio) is fine too; just match it with Vercel's Cleveland (`cle1`) function region in §6.
 3. On the project dashboard, click **Connect** and copy two connection strings:
    - **Pooled** (host contains `-pooler`) → this becomes `DATABASE_URL`.
    - **Direct** (toggle "Connection pooling" off) → this becomes `DATABASE_URL_UNPOOLED`, which migrations use.
@@ -112,7 +112,8 @@ In <https://console.cloud.google.com>:
 
 1. Go to <https://console.anthropic.com> → **Settings → Billing** and add credit. Pay-as-you-go; $10–20 goes a long way.
 2. **Settings → Limits**: set a **monthly spend limit** (e.g. $25) so a bug or runaway usage can't surprise you.
-3. **API keys → Create key** named `gamegarden-prod`. It goes into `ANTHROPIC_API_KEY`.
+3. Create the key **inside a workspace**: *Settings → Workspaces → Default* (or a new `GameGarden` workspace) → **API keys → Create key**, named `gamegarden-prod`. It goes into `ANTHROPIC_API_KEY`. Workspace keys also let you give GameGarden its own spend limit.
+   - If you already have an organization-level key (one that isn't scoped to a workspace), you can keep it. Also set `ANTHROPIC_WORKSPACE_ID` to the workspace ID (`wrkspc_…`, shown under *Settings → Workspaces*). Otherwise every call fails with *"must include the anthropic-workspace-id header"*.
 
 ### 5c. Reddit (optional; needs approval)
 
@@ -158,7 +159,8 @@ Until then, leave the Reddit variables unset. The Accounts page will show Reddit
 | `ANTHROPIC_API_KEY` | §5b |
 | `ALLOWED_EMAILS` | your Google email, e.g. `k128kevin@gmail.com` (comma-separate to add more) |
 | `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` / `REDDIT_USER_AGENT` | §5c, only once approved |
-| `ANTHROPIC_MODEL` | *(optional)* leave unset for `claude-opus-5` |
+| `ANTHROPIC_MODEL` | *(optional)* leave unset for `claude-opus-5-5` |
+| `ANTHROPIC_WORKSPACE_ID` | *(only if your API key isn't scoped to a workspace)* the workspace ID, `wrkspc_…` |
 
 7. Click **Deploy**. The build log should show `migrations applied successfully` followed by the Next.js build.
 
@@ -166,7 +168,7 @@ Until then, leave the Reddit variables unset. The Accounts page will show Reddit
 
 - **Production branch**: *Settings → Environments → Production*. Make sure the branch is `main`.
 - **Fluid compute**: *Settings → Functions*. Confirm it's **enabled**; it's the default for new projects. Without it, Hobby functions stop after 60 s and plan runs will time out.
-- **Function region**: *Settings → Functions → Function Region*. Choose **Washington, D.C. (iad1)** to sit next to Neon us-east-1.
+- **Function region**: *Settings → Functions → Function Region*. Pick the region that matches your Neon project: **Washington, D.C. (iad1)** for AWS us-east-1, or **Cleveland (cle1)** for AWS us-east-2 (Ohio). Redeploy afterwards; region changes only apply to new deployments.
 - **Preview deployments**: previews run migrations too, and sign-in won't work on preview URLs because they aren't registered with Google. Recommended: *Settings → Git → Ignored Build Step → "Only build production"*. If that option isn't offered, use a custom command:
 
   ```bash
@@ -240,11 +242,11 @@ Day-to-day:
 | Item | Cost |
 | --- | --- |
 | Vercel Hobby, Neon free, cron-job.org, Google APIs | $0 |
-| Claude, default `claude-opus-5` | roughly **$0.25–0.35 per plan run**, so about **$15–20/month per active plan** at 2 runs a day, plus any manual "Run analysis now" clicks |
+| Claude, default `claude-opus-5-5` | roughly **$0.20–0.35 per plan run**, so about **$12–20/month per active plan** at 2 runs a day, plus any manual "Run analysis now" clicks |
 | Claude with `ANTHROPIC_MODEL=claude-sonnet-5` | less than half of that |
 
 **Recommendations:**
-- **Start small:** one account plan and one game plan (about $30–40/month on Opus 5, or about $15 on Sonnet 5), and add more once you see value. Every active plan runs twice a day even when there's little new activity, so **pause plans you're not using**; they keep their history.
+- **Start small:** one account plan and one game plan (about $25–35/month on Opus 5.5, or about $15 on Sonnet 5), and add more once you see value. Every active plan runs twice a day even when there's little new activity, so **pause plans you're not using**; they keep their history.
 - **Watch spend:** the Anthropic console's **Usage** page shows spend per day. Each plan's Run history also shows token counts per run.
 - **Watch the scheduler:** in *Vercel → Project → Logs*, filter by `/api/cron/tick`. Background runs log a `[tick]` line with the results, and failed runs also show on the plan page with the error message.
 - **Watch the database:** the Neon dashboard shows storage. The free tier's 0.5 GB is years of personal use.
@@ -284,9 +286,11 @@ GameGarden already keeps each user's data separate. When you're ready to let oth
 | --- | --- |
 | Build fails at `drizzle-kit migrate` | `DATABASE_URL` / `DATABASE_URL_UNPOOLED` isn't set for that environment (often a preview build). Set the variables, or skip preview builds (§6). |
 | Google says `Error 400: redirect_uri_mismatch` | The redirect URI must match exactly: `https`, no trailing slash, same domain as `BETTER_AUTH_URL`. |
+| Clicking "Sign in with Google" does nothing; the browser's network tab shows 403 `Invalid origin` | The address you're on doesn't match `BETTER_AUTH_URL`. Open the production URL (not a deployment-specific `…-<hash>-….vercel.app` URL; production now redirects those automatically), or fix `BETTER_AUTH_URL` (e.g. it's still `http://localhost:3000`) and **redeploy**. The sign-in page shows a warning explaining which of these it is. |
 | Sign-in returns to the home page with an error | Your email isn't in `ALLOWED_EMAILS`, or `BETTER_AUTH_URL` doesn't match the URL you're using. |
 | `/api/cron/tick` returns 401 | The header must be exactly `Authorization: Bearer <CRON_SECRET>`, matching Vercel's value. |
 | Plan run failed: `ANTHROPIC_API_KEY is not set`, 401, or credit errors | Check the key in Vercel (then redeploy) and your Anthropic billing and limits. |
+| Plan run failed: `This API key is not scoped to a workspace … anthropic-workspace-id header` | Create the API key inside a workspace (§5b), or keep the key and set `ANTHROPIC_WORKSPACE_ID=wrkspc_…`. Then redeploy and click **Run analysis now**. |
 | Plan run failed with a timeout | Fluid compute is off (§6), or you have many plans. Runs that don't finish in time are picked up by the next tick in the same slot. |
 | YouTube disconnects about weekly | The Google app is still in **Testing**. Publish it (§5a step 5), then reconnect YouTube. |
 | "No YouTube channel found" | That Google account has no channel. Reconnect and choose the Brand Account that owns the channel. |
@@ -295,7 +299,7 @@ GameGarden already keeps each user's data separate. When you're ready to let oth
 | Reddit 401/403 after connecting | The app isn't approved yet, or `REDDIT_USER_AGENT` doesn't follow the `web:name:version (by /u/you)` format. |
 | Bluesky "login failed" | The app password was revoked or mistyped. Create a new one and reconnect. |
 | All connected accounts suddenly error | `ENCRYPTION_KEY` changed. Restore the original value, or reconnect every account. |
-| Scheduled posts go out late | The pinger isn't running. Check the cron-job.org execution history (§7). |
+| Scheduled post stays "scheduled" after its time | Nothing is calling the heartbeat often enough. Vercel's free cron only runs around 9 AM and 9 PM ET, so set up cron-job.org (§7). The **Schedule** page shows a warning saying whether no heartbeat has arrived or calls are being rejected for a wrong `CRON_SECRET`. In the meantime, due posts go out when you open GameGarden, and overdue items have a **Post now** button. |
 | Steam/itch.io stats missing | Click **Refresh store data** on the game page; the error explains what failed (e.g. the store page isn't public yet). |
 
 ---

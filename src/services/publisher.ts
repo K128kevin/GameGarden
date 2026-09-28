@@ -162,7 +162,7 @@ export async function executeAction(actionId: string) {
 }
 
 /** Publish every approved action whose time has come. Called by the cron tick. */
-export async function publishDueActions(deadline: number) {
+export async function publishDueActions(deadline: number, opts: { userId?: string } = {}) {
   // Anything stuck in "publishing" for 15+ minutes was interrupted mid-flight.
   // We do NOT retry it automatically (it may have been posted) — flag it instead.
   await db
@@ -180,6 +180,7 @@ export async function publishDueActions(deadline: number) {
         eq(scheduledActions.status, "scheduled"),
         isNotNull(scheduledActions.approvedAt),
         lte(scheduledActions.scheduledFor, new Date()),
+        opts.userId ? eq(scheduledActions.userId, opts.userId) : undefined,
       ),
     )
     .orderBy(scheduledActions.scheduledFor)
@@ -192,4 +193,9 @@ export async function publishDueActions(deadline: number) {
     if (r) results.push({ id, status: r.status });
   }
   return results;
+}
+
+/** Publish one user's due, already-approved items (used when they open the app). */
+export function publishDueForUser(userId: string) {
+  return publishDueActions(Date.now() + 30_000, { userId }).catch(() => []);
 }

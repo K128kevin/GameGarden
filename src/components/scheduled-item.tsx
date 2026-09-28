@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cancelScheduled, retryScheduled, updateScheduled } from "@/app/actions";
+import { cancelScheduled, publishScheduledNow, retryScheduled, updateScheduled } from "@/app/actions";
 import { ActionButton, ActionForm, SubmitButton } from "./forms";
 import { btn, input } from "./ui";
 
@@ -11,12 +11,14 @@ export function ScheduledControls({
   text,
   title,
   whenLocal,
+  overdue = false,
 }: {
   id: string;
   status: string;
   text: string;
   title: string | null;
   whenLocal: string;
+  overdue?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   if (editing && status === "scheduled") {
@@ -36,6 +38,16 @@ export function ScheduledControls({
   }
   return (
     <div className="mt-3 flex flex-wrap gap-2">
+      {status === "scheduled" && (
+        <ActionButton
+          action={publishScheduledNow.bind(null, id)}
+          className={overdue ? btn.primary : btn.ghost}
+          pendingText="Posting…"
+          confirm="Post this right now?"
+        >
+          Post now
+        </ActionButton>
+      )}
       {status === "scheduled" && (
         <button className={btn.ghost} onClick={() => setEditing(true)}>
           Edit

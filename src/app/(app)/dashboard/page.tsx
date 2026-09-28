@@ -2,8 +2,9 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { activityLog, games, planRuns, plans, recommendations, scheduledActions, socialAccounts } from "@/db/schema";
 import { getUserSettings, requireUser } from "@/lib/session";
-import { formatDateTime, formatRelative, nextPlanSlot, slotLabelFromId } from "@/lib/time";
+import { formatDateTime, formatRelative, msFromNow, nextPlanSlot, slotLabelFromId } from "@/lib/time";
 import { toRecView } from "@/lib/views";
+import { HeartbeatNotice } from "@/components/heartbeat-notice";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { Badge, btn, Card, CardTitle, EmptyState, Link, PageHeader, PlatformBadge, Stat } from "@/components/ui";
 
@@ -60,6 +61,14 @@ export default async function Dashboard() {
           </Link>
         }
       />
+
+      {upcoming.some((u) => u.status === "scheduled") && (
+        <div className="mb-6 empty:hidden">
+          <HeartbeatNotice
+            overdueCount={upcoming.filter((u) => u.status === "scheduled" && u.scheduledFor < msFromNow(-10 * 60_000)).length}
+          />
+        </div>
+      )}
 
       {updatedPlans.length > 0 && (
         <div className="mb-6 rounded-xl border border-emerald-700/50 bg-emerald-950/30 p-4">

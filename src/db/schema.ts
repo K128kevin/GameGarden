@@ -424,3 +424,13 @@ export type Recommendation = typeof recommendations.$inferSelect;
 export type ScheduledAction = typeof scheduledActions.$inferSelect;
 export type ContentItem = typeof contentItems.$inferSelect;
 export type Interaction = typeof interactions.$inferSelect;
+
+/** Small key/value store for app-wide status (e.g. last heartbeat). */
+export const systemState = pgTable("system_state", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});

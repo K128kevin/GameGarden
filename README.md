@@ -61,7 +61,7 @@ Short version:
 4. Import the repo into Vercel, set the build command to `npm run vercel-build`, and add the variables from `.env.example`.
 5. Point cron-job.org at `APP_URL/api/cron/tick` every 5 minutes with `Authorization: Bearer $CRON_SECRET`.
 
-**Cost:** each plan run is one Claude call, typically 15–30k input tokens and 4–8k output tokens. With the default `claude-opus-5` that is roughly $0.25–0.35 per run, so about $15–20 a month per active plan at two runs a day. Set `ANTHROPIC_MODEL=claude-sonnet-5` to cut that by more than half. Requests enable Anthropic's server-side refusal fallback (`fallbacks: "default"`).
+**Cost:** each plan run is one Claude call, typically 15–30k input tokens and 4–8k output tokens. With the default `claude-opus-5-5` ($4 / $20 per million input/output tokens) that is roughly $0.20–0.35 per run, so about $12–20 a month per active plan at two runs a day. Set `ANTHROPIC_MODEL=claude-sonnet-5` to cut that roughly in half again. Requests enable Anthropic's server-side refusal fallback (`fallbacks: "default"`).
 
 ## Local development
 
