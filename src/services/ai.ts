@@ -67,7 +67,10 @@ function anthropic() {
   if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
     throw new Error("ANTHROPIC_API_KEY is not set");
   }
-  client ??= new Anthropic();
+  // Organization-level API keys (not scoped to a workspace) must say which
+  // workspace to bill; workspace-scoped keys don't need this.
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID?.trim();
+  client ??= new Anthropic(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {});
   return client;
 }
 

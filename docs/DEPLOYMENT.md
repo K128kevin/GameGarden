@@ -112,7 +112,8 @@ In <https://console.cloud.google.com>:
 
 1. Go to <https://console.anthropic.com> → **Settings → Billing** and add credit. Pay-as-you-go; $10–20 goes a long way.
 2. **Settings → Limits**: set a **monthly spend limit** (e.g. $25) so a bug or runaway usage can't surprise you.
-3. **API keys → Create key** named `gamegarden-prod`. It goes into `ANTHROPIC_API_KEY`.
+3. Create the key **inside a workspace**: *Settings → Workspaces → Default* (or a new `GameGarden` workspace) → **API keys → Create key**, named `gamegarden-prod`. It goes into `ANTHROPIC_API_KEY`. Workspace keys also let you give GameGarden its own spend limit.
+   - If you already have an organization-level key (one that isn't scoped to a workspace), you can keep it. Also set `ANTHROPIC_WORKSPACE_ID` to the workspace ID (`wrkspc_…`, shown under *Settings → Workspaces*). Otherwise every call fails with *"must include the anthropic-workspace-id header"*.
 
 ### 5c. Reddit (optional; needs approval)
 
@@ -159,6 +160,7 @@ Until then, leave the Reddit variables unset. The Accounts page will show Reddit
 | `ALLOWED_EMAILS` | your Google email, e.g. `k128kevin@gmail.com` (comma-separate to add more) |
 | `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` / `REDDIT_USER_AGENT` | §5c, only once approved |
 | `ANTHROPIC_MODEL` | *(optional)* leave unset for `claude-opus-5` |
+| `ANTHROPIC_WORKSPACE_ID` | *(only if your API key isn't scoped to a workspace)* the workspace ID, `wrkspc_…` |
 
 7. Click **Deploy**. The build log should show `migrations applied successfully` followed by the Next.js build.
 
@@ -288,6 +290,7 @@ GameGarden already keeps each user's data separate. When you're ready to let oth
 | Sign-in returns to the home page with an error | Your email isn't in `ALLOWED_EMAILS`, or `BETTER_AUTH_URL` doesn't match the URL you're using. |
 | `/api/cron/tick` returns 401 | The header must be exactly `Authorization: Bearer <CRON_SECRET>`, matching Vercel's value. |
 | Plan run failed: `ANTHROPIC_API_KEY is not set`, 401, or credit errors | Check the key in Vercel (then redeploy) and your Anthropic billing and limits. |
+| Plan run failed: `This API key is not scoped to a workspace … anthropic-workspace-id header` | Create the API key inside a workspace (§5b), or keep the key and set `ANTHROPIC_WORKSPACE_ID=wrkspc_…`. Then redeploy and click **Run analysis now**. |
 | Plan run failed with a timeout | Fluid compute is off (§6), or you have many plans. Runs that don't finish in time are picked up by the next tick in the same slot. |
 | YouTube disconnects about weekly | The Google app is still in **Testing**. Publish it (§5a step 5), then reconnect YouTube. |
 | "No YouTube channel found" | That Google account has no channel. Reconnect and choose the Brand Account that owns the channel. |
