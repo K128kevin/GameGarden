@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import * as z from "zod/v4";
 
-export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 
 export const RecommendationOutput = z.object({
   kind: z
@@ -100,6 +100,7 @@ export async function generatePlanUpdate(context: unknown): Promise<{
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     thinking: { type: "adaptive" },
+    // Opus 5.5 defaults to "medium"; planning quality benefits from "high".
     output_config: { effort: "high", format: betaZodOutputFormat(PlanOutput) },
     system: SYSTEM_PROMPT,
     messages: [

@@ -15,7 +15,7 @@ Budget about an hour. Most of it is clicking through the Google Cloud console. D
 | App URL | `https://<project>.vercel.app` to start | Stable and free. A custom domain can come later (see §10). |
 | Production branch | **`main`** | Keep production separate from the `claude/...` work branch. |
 | Scheduler | Vercel Cron (built in) **+ cron-job.org every 5 min** | Vercel Hobby cron runs each job only once a day. The pinger makes scheduled posts go out within about 5 minutes of their time. |
-| AI model | Default **`claude-opus-5`**, with a spending limit set in the Anthropic console | Best-quality strategy. Set `ANTHROPIC_MODEL=claude-sonnet-5` later if cost matters more (§9). |
+| AI model | Default **`claude-opus-5-5`** (Claude Opus 5.5), with a spending limit set in the Anthropic console | Best-quality strategy. Set `ANTHROPIC_MODEL=claude-sonnet-5` later if cost matters more (§9). |
 | Access | `ALLOWED_EMAILS=<your Gmail>` | Keeps the instance personal until you're ready to open it up. |
 
 ---
@@ -159,7 +159,7 @@ Until then, leave the Reddit variables unset. The Accounts page will show Reddit
 | `ANTHROPIC_API_KEY` | §5b |
 | `ALLOWED_EMAILS` | your Google email, e.g. `k128kevin@gmail.com` (comma-separate to add more) |
 | `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` / `REDDIT_USER_AGENT` | §5c, only once approved |
-| `ANTHROPIC_MODEL` | *(optional)* leave unset for `claude-opus-5` |
+| `ANTHROPIC_MODEL` | *(optional)* leave unset for `claude-opus-5-5` |
 | `ANTHROPIC_WORKSPACE_ID` | *(only if your API key isn't scoped to a workspace)* the workspace ID, `wrkspc_…` |
 
 7. Click **Deploy**. The build log should show `migrations applied successfully` followed by the Next.js build.
@@ -242,11 +242,11 @@ Day-to-day:
 | Item | Cost |
 | --- | --- |
 | Vercel Hobby, Neon free, cron-job.org, Google APIs | $0 |
-| Claude, default `claude-opus-5` | roughly **$0.25–0.35 per plan run**, so about **$15–20/month per active plan** at 2 runs a day, plus any manual "Run analysis now" clicks |
+| Claude, default `claude-opus-5-5` | roughly **$0.20–0.35 per plan run**, so about **$12–20/month per active plan** at 2 runs a day, plus any manual "Run analysis now" clicks |
 | Claude with `ANTHROPIC_MODEL=claude-sonnet-5` | less than half of that |
 
 **Recommendations:**
-- **Start small:** one account plan and one game plan (about $30–40/month on Opus 5, or about $15 on Sonnet 5), and add more once you see value. Every active plan runs twice a day even when there's little new activity, so **pause plans you're not using**; they keep their history.
+- **Start small:** one account plan and one game plan (about $25–35/month on Opus 5.5, or about $15 on Sonnet 5), and add more once you see value. Every active plan runs twice a day even when there's little new activity, so **pause plans you're not using**; they keep their history.
 - **Watch spend:** the Anthropic console's **Usage** page shows spend per day. Each plan's Run history also shows token counts per run.
 - **Watch the scheduler:** in *Vercel → Project → Logs*, filter by `/api/cron/tick`. Background runs log a `[tick]` line with the results, and failed runs also show on the plan page with the error message.
 - **Watch the database:** the Neon dashboard shows storage. The free tier's 0.5 GB is years of personal use.
