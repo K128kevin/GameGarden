@@ -4,7 +4,7 @@ import { useState } from "react";
 import { approveRecommendation, setRecommendationStatus } from "@/app/actions";
 import type { PlatformCapabilities } from "@/platforms/types";
 import { ActionForm, SubmitButton } from "./forms";
-import { btn, input } from "./ui";
+import { btn, input, inputInline } from "./ui";
 
 export type RecView = {
   id: string;
@@ -146,7 +146,7 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
           </div>
           {showTime && (
             <div className="flex flex-wrap items-center gap-2">
-              <input type="datetime-local" name="when" defaultValue={rec.suggestedLocal ?? ""} className={`${input} w-auto`} />
+              <input type="datetime-local" name="when" defaultValue={rec.suggestedLocal ?? ""} className={inputInline} />
               <SubmitButton name="mode" value="schedule_custom" className={btn.secondary} pendingText="Scheduling…">
                 Schedule at this time
               </SubmitButton>

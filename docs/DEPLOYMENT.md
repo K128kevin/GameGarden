@@ -244,6 +244,7 @@ Day-to-day:
 | Vercel Hobby, Neon free, cron-job.org, Google APIs | $0 |
 | Claude, default `claude-opus-5-5` | roughly **$0.20–0.35 per plan run**, so about **$12–20/month per active plan** at 2 runs a day, plus any manual "Run analysis now" clicks |
 | Claude with `ANTHROPIC_MODEL=claude-sonnet-5` | less than half of that |
+| Inbox reply drafts (only when you click **Draft reply**) | about $0.003 each with Haiku 4.5 (default), $0.01 with Sonnet 5.5, $0.04 with Opus 5.5 |
 
 **Recommendations:**
 - **Start small:** one account plan and one game plan (about $25–35/month on Opus 5.5, or about $15 on Sonnet 5), and add more once you see value. Every active plan runs twice a day even when there's little new activity, so **pause plans you're not using**; they keep their history.

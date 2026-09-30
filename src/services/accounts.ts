@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   accountSnapshots,
@@ -10,7 +10,13 @@ import {
 } from "@/db/schema";
 import { decryptJson, encryptJson } from "@/lib/crypto";
 import { getConnector } from "@/platforms/registry";
-import { PlatformError, type AccountContext, type ConnectedAccountInfo, type OwnContent } from "@/platforms/types";
+import {
+  PlatformError,
+  type AccountContext,
+  type ConnectedAccountInfo,
+  type InboundInteraction,
+  type OwnContent,
+} from "@/platforms/types";
 
 export function accountContext(acct: SocialAccount): AccountContext {
   const ctx: AccountContext = {
@@ -123,38 +129,122 @@ export async function syncAccount(acct: SocialAccount): Promise<SyncResult> {
       .from(contentItems)
       .where(eq(contentItems.accountId, acct.id));
 
-    let newInteractions = 0;
-    const inbound = await connector.fetchInteractions(ctx, { limit: 50 });
-    if (inbound.length) {
-      const inserted = await db
-        .insert(interactions)
-        .values(
-          inbound.map((i) => ({
-            accountId: acct.id,
-            externalId: i.externalId,
-            kind: i.kind,
-            authorHandle: i.authorHandle ?? null,
-            text: i.text,
-            url: i.url ?? null,
-            onExternalId: i.onExternalId ?? null,
-            replyTarget: i.replyTarget ?? null,
-            occurredAt: i.occurredAt,
-          })),
-        )
-        .onConflictDoNothing()
-        .returning({ id: interactions.id });
-      newInteractions = inserted.length;
-    }
+    const newInteractions = await upsertInteractions(acct.id, await connector.fetchInteractions(ctx, { limit: 50 }));
 
     await db
       .update(socialAccounts)
-      .set({ lastSyncedAt: new Date(), status: "active", statusMessage: null })
+      .set({ lastSyncedAt: new Date(), inboundCheckedAt: new Date(), status: "active", statusMessage: null })
       .where(eq(socialAccounts.id, acct.id));
     return { ok: true, newContent: after[0].c - before[0].c, newInteractions };
   } catch (e) {
     await markAccountError(acct, e);
     return { ok: false, error: e instanceof Error ? e.message : String(e), newContent: 0, newInteractions: 0 };
   }
+}
+
+/** Insert new interactions; returns how many were new. Marks ones the platform shows you already answered. */
+async function upsertInteractions(accountId: string, inbound: InboundInteraction[]): Promise<number> {
+  if (!inbound.length) return 0;
+  const inserted = await db
+    .insert(interactions)
+    .values(
+      inbound.map((i) => ({
+        accountId,
+        externalId: i.externalId,
+        kind: i.kind,
+        authorHandle: i.authorHandle ?? null,
+        text: i.text,
+        url: i.url ?? null,
+        onExternalId: i.onExternalId ?? null,
+        replyTarget: i.replyTarget ?? null,
+        occurredAt: i.occurredAt,
+        status: i.alreadyReplied ? "replied" : "open",
+      })),
+    )
+    .onConflictDoNothing()
+    .returning({ id: interactions.id });
+  const answered = inbound.filter((i) => i.alreadyReplied).map((i) => i.externalId);
+  if (answered.length) {
+    await db
+      .update(interactions)
+      .set({ status: "replied" })
+      .where(
+        and(eq(interactions.accountId, accountId), eq(interactions.status, "open"), inArray(interactions.externalId, answered)),
+      );
+  }
+  return inserted.length;
+}
+
+/**
+ * Light check between planning runs: new replies/mentions/comments plus your own
+ * recent posts (to detect what you've already answered). No model call.
+ */
+export async function syncInbound(acct: SocialAccount): Promise<{ ok: boolean; newInteractions: number; error?: string }> {
+  const connector = getConnector(acct.platform);
+  const ctx = accountContext(acct);
+  try {
+    await upsertOwnContent(acct.id, await connector.fetchOwnContent(ctx, { limit: 25 }));
+    const newInteractions = await upsertInteractions(acct.id, await connector.fetchInteractions(ctx, { limit: 50 }));
+    await db
+      .update(socialAccounts)
+      .set({ inboundCheckedAt: new Date(), status: "active", statusMessage: null })
+      .where(eq(socialAccounts.id, acct.id));
+    return { ok: true, newInteractions };
+  } catch (e) {
+    await markAccountError(acct, e);
+    return { ok: false, newInteractions: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export const INBOUND_CHECK_MINUTES = 30;
+
+/**
+ * Atomically claim accounts whose last light check is older than `minutes`, so
+ * overlapping ticks/page views don't check the same account twice.
+ */
+async function claimStaleAccounts(minutes: number, opts: { userId?: string; limit: number }) {
+  const cutoff = new Date(Date.now() - minutes * 60_000);
+  const candidates = await db
+    .select({ id: socialAccounts.id })
+    .from(socialAccounts)
+    .where(
+      and(
+        eq(socialAccounts.status, "active"),
+        opts.userId ? eq(socialAccounts.userId, opts.userId) : undefined,
+        or(isNull(socialAccounts.inboundCheckedAt), lt(socialAccounts.inboundCheckedAt, cutoff)),
+      ),
+    )
+    .orderBy(sql`${socialAccounts.inboundCheckedAt} asc nulls first`)
+    .limit(opts.limit);
+  const claimed: SocialAccount[] = [];
+  for (const c of candidates) {
+    const [row] = await db
+      .update(socialAccounts)
+      .set({ inboundCheckedAt: new Date() })
+      .where(
+        and(
+          eq(socialAccounts.id, c.id),
+          or(isNull(socialAccounts.inboundCheckedAt), lt(socialAccounts.inboundCheckedAt, cutoff)),
+        ),
+      )
+      .returning();
+    if (row) claimed.push(row);
+  }
+  return claimed;
+}
+
+/** Run light checks for accounts that are due (called from the heartbeat). */
+export async function checkInboundDue(deadline: number, opts: { userId?: string; minutes?: number } = {}) {
+  const accts = await claimStaleAccounts(opts.minutes ?? INBOUND_CHECK_MINUTES - 5, { userId: opts.userId, limit: 25 });
+  let checked = 0;
+  let newInteractions = 0;
+  for (const a of accts) {
+    if (Date.now() > deadline) break;
+    const r = await syncInbound(a);
+    checked++;
+    newInteractions += r.newInteractions;
+  }
+  return { checked, newInteractions };
 }
 
 export async function getOwnedAccount(userId: string, accountId: string) {
@@ -172,4 +262,9 @@ export async function latestSnapshots(accountId: string, limit = 30) {
     .where(eq(accountSnapshots.accountId, accountId))
     .orderBy(desc(accountSnapshots.capturedAt))
     .limit(limit);
+}
+
+/** Page-view backstop: check this user's accounts if not checked in the last 10 minutes. */
+export function checkInboundForUser(userId: string) {
+  return checkInboundDue(Date.now() + 45_000, { userId, minutes: 10 }).catch(() => ({ checked: 0, newInteractions: 0 }));
 }

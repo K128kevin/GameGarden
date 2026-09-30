@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import * as z from "zod/v4";
+import { DRAFTING_RULES } from "./drafting-rules";
+import { anthropic } from "./llm";
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 
@@ -57,34 +59,15 @@ Your job on each run:
 3. Recommend the next concrete actions (usually 3 to 8) for roughly the next 12 to 36 hours, consistent with the long-term plan. Prioritise replying to genuine new replies/comments/mentions (use their I# ref as targetRef), thoughtful participation in discovered conversations (D# refs), and well-timed original posts. Include at most one or two non-publishing tasks (content/profile/engage/other) when they matter.
 
 Rules for drafts:
-- Drafts are published under the user's name, so they must read like the user typed them, not like AI wrote them. Match the tone, length, capitalization, punctuation and emoji habits of the user's own recent posts (the recentContent items marked "manually on the platform" are the best reference). When there is little to go on, write like a friendly solo dev posting casually: plain words, contractions, first person, one or two short sentences.
-- Never use em dashes or en dashes (— or –) in drafts. Use a comma, a period, parentheses, or just two sentences instead.
-- Avoid phrasing that people recognize as AI-written:
-  - Words and stock phrases such as delve, tapestry, testament, embark, journey, elevate, unleash, unlock, seamless, robust, vibrant, foster, resonate, captivating, immersive experience, game-changer, "dive into", "dive in", "navigate", "in today's…", "the world of…", "whether you're X or Y", "thrilled/excited to announce", "I'm so excited to share".
-  - Constructions like "It's not just X, it's Y", "X isn't about Y, it's about Z", tidy lists of three adjectives or benefits, and a rhetorical question followed by its own answer.
-  - Openers and closers like "Great question!", "Absolutely!", "Love this!", "Hope this helps!", "Happy to help", "Let me know what you think!", "What do you think? Let me know in the comments", and a summary sentence that restates the post.
-  - Generic enthusiasm and marketing voice: no hype, no superlatives the user wouldn't use, no engagement bait, no emoji strings, no hashtag spam (Bluesky: 0 to 2 relevant hashtags at most, and only if the user uses them).
-  - Over-polished structure: no headings, bold text or bullet points in short posts or replies, and no perfectly balanced paragraphs. Slightly uneven, specific and concrete beats smooth and generic.
-- Prefer one specific detail (a mechanic, a number, a bug you fixed, something from the post you're replying to) over general statements. Replies should respond to what the person actually said.
+${DRAFTING_RULES}
 - Replies must add value to the conversation (answer, encourage, share a relevant insight). Only mention the user's own game in a reply when it is clearly welcome and relevant.
 - Respect platform norms: Bluesky posts must be ≤ 300 characters including any link. Reddit posts need draftTitle and community, must follow that subreddit's self-promotion rules (most indie subs expect ~90% genuine participation; promotional posts only in appropriate subs or designated threads), and should read like a real community member, not an ad. YouTube cannot publish videos or community posts through GameGarden. Deliver video/Short ideas as kind "content" with draftTitle and a description/outline in draftText; YouTube replies/comments are fine.
+- Skip interactions where alreadyRepliedByUser is true or an inboxStatus is set: the user handles quick replies in their Inbox between runs.
 - Only use kind "post" or "reply" on accounts whose capabilities allow it; replies must reference a valid I# or D# targetRef from the input. Never invent refs, URLs, stats, or quotes.
 - Don't repeat recommendations the user dismissed unless something has changed; learn from their notes. If a previously pending recommendation (R#) is still a good idea, re-issue it (possibly improved); if the data shows the user already did it manually, list it in completedRefs.
 - suggestedTime must be in the future (at least 15 minutes after "now"), chosen for when the audience is most active (use the timing learnings in the strategy and observed engagement). Spread posts out; don't stack multiple original posts on one account within a few hours.
 - Everything you suggest will be reviewed by the user; nothing is posted without their explicit approval, so make drafts ready to use as-is.
 - focusKeywords should be specific search phrases that surface conversations where this user can genuinely contribute (genre, mechanics, art style, devlog topics, "screenshot saturday"-style community events), not generic terms.`;
-
-let client: Anthropic | null = null;
-function anthropic() {
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
-    throw new Error("ANTHROPIC_API_KEY is not set");
-  }
-  // Organization-level API keys (not scoped to a workspace) must say which
-  // workspace to bill; workspace-scoped keys don't need this.
-  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID?.trim();
-  client ??= new Anthropic(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {});
-  return client;
-}
 
 export async function generatePlanUpdate(context: unknown): Promise<{
   output: PlanOutputT;

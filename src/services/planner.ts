@@ -159,7 +159,8 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
         text: truncate(i.text, 400),
         when: formatDateTime(i.occurredAt, tz),
         newSinceLastRun: i.firstSeenAt > sinceLastRun,
-        alreadyRepliedByUser: ownIds.has(i.externalId),
+        alreadyRepliedByUser: ownIds.has(i.externalId) || i.status === "replied",
+        inboxStatus: i.status === "dismissed" ? "user dismissed: no reply needed" : i.status === "scheduled" ? "reply already scheduled" : undefined,
         replyable: refs.has(ref),
       };
     });

@@ -193,14 +193,14 @@ describe("growth plan flow", () => {
       scheduledFor: new Date(Date.now() + 3600_000),
       recommendationId: reply.id,
     });
-    expect(await publishDueActions(Date.now() + 10_000)).toHaveLength(0);
+    expect(await publishDueActions(Date.now() + 10_000, { userId })).toHaveLength(0);
     expect(published).toHaveLength(0);
     const [recAfter] = await db.select().from(recommendations).where(eq(recommendations.id, reply.id));
     expect(recAfter.status).toBe("scheduled");
 
     // Make it due → published exactly once.
     await db.update(scheduledActions).set({ scheduledFor: new Date(Date.now() - 1000) }).where(eq(scheduledActions.id, future.id));
-    const results = await publishDueActions(Date.now() + 10_000);
+    const results = await publishDueActions(Date.now() + 10_000, { userId });
     expect(results).toEqual([{ id: future.id, status: "published" }]);
     expect(published).toHaveLength(1);
     expect(await executeAction(future.id)).toBeNull(); // can't double-publish
