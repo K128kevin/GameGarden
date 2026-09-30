@@ -113,6 +113,8 @@ export const socialAccounts = pgTable(
     status: text("status").notNull().default("active"), // active | error
     statusMessage: text("status_message"),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    /** Last light check for new replies/mentions (between planning runs). */
+    inboundCheckedAt: timestamp("inbound_checked_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -180,6 +182,11 @@ export const interactions = pgTable(
     replyTarget: jsonb("reply_target").$type<Record<string, unknown> | null>(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Inbox state: open | replied | dismissed */
+    status: text("status").notNull().default("open"),
+    draftText: text("draft_text"),
+    draftModel: text("draft_model"),
+    draftedAt: timestamp("drafted_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("interactions_account_ext").on(t.accountId, t.externalId),

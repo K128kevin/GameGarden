@@ -17,6 +17,9 @@ export const btn = {
 export const input =
   "w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500";
 
+/** Same look as `input`, but sized to its content (for selects, date pickers, buttons in a row). */
+export const inputInline = input.replace("w-full ", "w-auto ");
+
 export const label = "mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-400";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {

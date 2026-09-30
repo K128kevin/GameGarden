@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: "◎" },
+  { href: "/inbox", label: "Inbox", icon: "✉", count: "inbox" as const },
   { href: "/plans", label: "Growth plans", icon: "✦", count: "plans" as const },
   { href: "/accounts", label: "Accounts", icon: "◉" },
   { href: "/games", label: "Games", icon: "▣" },
@@ -13,7 +14,7 @@ const items = [
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];
 
-export function NavLinks({ counts }: { counts: { plans: number; recommendations: number; schedule: number } }) {
+export function NavLinks({ counts }: { counts: { plans: number; recommendations: number; schedule: number; inbox: number } }) {
   const path = usePathname();
   return (
     <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible">
@@ -33,9 +34,9 @@ export function NavLinks({ counts }: { counts: { plans: number; recommendations:
             {n > 0 && (
               <span
                 className={`ml-auto rounded-full px-1.5 text-xs font-semibold ${
-                  it.count === "plans" ? "bg-emerald-500 text-emerald-950" : "bg-zinc-700 text-zinc-200"
+                  it.count === "plans" || it.count === "inbox" ? "bg-emerald-500 text-emerald-950" : "bg-zinc-700 text-zinc-200"
                 }`}
-                title={it.count === "plans" ? "Plans updated since you last looked" : undefined}
+                title={it.count === "plans" ? "Plans updated since you last looked" : it.count === "inbox" ? "Replies waiting on you" : undefined}
               >
                 {it.count === "plans" ? `${n} new` : n}
               </span>

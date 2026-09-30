@@ -9,6 +9,7 @@ Social media marketing and account growth for indie game developers.
   2. searches the platform for relevant conversations (keywords and subreddits that the strategist keeps up to date);
   3. sends all of that, plus the long-term strategy, earlier run assessments, and the history of past recommendations (what you scheduled, dismissed and why, or ignored), to Claude;
   4. stores an assessment of what changed, a revised long-term strategy, and new recommended actions. Posts and replies come with drafts and suggested times.
+- **Inbox for fast replies:** between plan runs, GameGarden checks each account for new replies, mentions and comments about every 30 minutes (no AI call) and lists the ones waiting on you. Click **Draft reply** to have Haiku 4.5 (default), Sonnet 5.5 or Opus 5.5 write one in your voice, then edit, post or schedule it.
 - **Approval first:** schedule a recommendation for its suggested time with one click, edit it, pick another time, or post it now. **Nothing is ever posted unless you clicked Post now or scheduled it yourself.**
 - **Clear signals:** plans updated since you last looked get a "new" badge in the nav and a banner on the dashboard and plan page.
 - **History:** every run, recommendation, and action is kept, and each plan has a **Clear history** button.
@@ -29,7 +30,8 @@ Social media marketing and account growth for indie game developers.
 There is one idempotent heartbeat endpoint, `GET /api/cron/tick` (it needs `Authorization: Bearer $CRON_SECRET`). Each call:
 
 1. publishes **approved** scheduled items that are due;
-2. works out the current planning slot (`YYYY-MM-DD-am/pm`, 9 AM or 9 PM `America/New_York`, so daylight saving time is handled) and runs every enabled plan that hasn't run for that slot yet. Runs are keyed per (plan, slot), so extra calls never cause double runs.
+2. checks accounts for new replies, mentions and comments for the Inbox, at most once every ~30 minutes per account. No model calls; drafting only happens when you click **Draft reply**;
+3. works out the current planning slot (`YYYY-MM-DD-am/pm`, 9 AM or 9 PM `America/New_York`, so daylight saving time is handled) and runs every enabled plan that hasn't run for that slot yet. Runs are keyed per (plan, slot), so extra calls never cause double runs.
 
 `vercel.json` calls the tick at 13:00, 14:00, 01:00 and 02:00 UTC. That covers 9 AM and 9 PM Eastern in both EDT and EST, and it fits Vercel Hobby's limit of one run per day per cron job. Calls outside a slot do nothing.
 
@@ -61,7 +63,7 @@ Short version:
 4. Import the repo into Vercel, set the build command to `npm run vercel-build`, and add the variables from `.env.example`.
 5. Point cron-job.org at `APP_URL/api/cron/tick` every 5 minutes with `Authorization: Bearer $CRON_SECRET`.
 
-**Cost:** each plan run is one Claude call, typically 15–30k input tokens and 4–8k output tokens. With the default `claude-opus-5-5` ($4 / $20 per million input/output tokens) that is roughly $0.20–0.35 per run, so about $12–20 a month per active plan at two runs a day. Set `ANTHROPIC_MODEL=claude-sonnet-5` to cut that roughly in half again. Requests enable Anthropic's server-side refusal fallback (`fallbacks: "default"`).
+**Cost:** each plan run is one Claude call, typically 15–30k input tokens and 4–8k output tokens. With the default `claude-opus-5-5` ($4 / $20 per million input/output tokens) that is roughly $0.20–0.35 per run, so about $12–20 a month per active plan at two runs a day. Set `ANTHROPIC_MODEL=claude-sonnet-5` to cut that roughly in half again. Requests enable Anthropic's server-side refusal fallback (`fallbacks: "default"`). Inbox reply drafts are separate and only run when you click: roughly $0.003 with Haiku 4.5, $0.01 with Sonnet 5.5, and $0.04 with Opus 5.5 per draft.
 
 ## Local development
 

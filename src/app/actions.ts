@@ -9,6 +9,7 @@ import {
   contentItems,
   gameAccounts,
   gameContent,
+  interactions,
   games,
   plans,
   recommendations,
@@ -21,8 +22,23 @@ import { encrypt } from "@/lib/crypto";
 import { requireUser, getUserSettings } from "@/lib/session";
 import { parseLocalInput } from "@/lib/time";
 import { getConnector } from "@/platforms/registry";
-import { accountContext, getOwnedAccount, syncAccount, upsertConnectedAccount, upsertOwnContent } from "@/services/accounts";
+import {
+  accountContext,
+  getOwnedAccount,
+  syncAccount,
+  syncInbound,
+  upsertConnectedAccount,
+  upsertOwnContent,
+} from "@/services/accounts";
 import { getOwnedGame, refreshStoreData } from "@/services/games";
+import {
+  draftInboxReply,
+  getOwnedInteraction,
+  listInbox,
+  reopenInteractionForTarget,
+  setInteractionStatus,
+} from "@/services/inbox";
+import { replyModel } from "@/lib/reply-models";
 import { clearPlanHistory, runPlan } from "@/services/planner";
 import { createApprovedAction, executeAction, validatePayload } from "@/services/publisher";
 import { parseSteamAppId } from "@/stores/steam";
@@ -333,6 +349,7 @@ export async function cancelScheduled(id: string): Promise<ActionState> {
     if (a.recommendationId) {
       await db.update(recommendations).set({ status: "pending", statusChangedAt: new Date() }).where(eq(recommendations.id, a.recommendationId));
     }
+    if (a.payload.kind === "reply") await reopenInteractionForTarget(a.accountId, a.payload.target?.externalId);
     await log(user.id, "schedule_canceled", `Canceled scheduled ${a.payload.kind}: "${a.payload.text.slice(0, 60)}"`, { accountId: a.accountId });
     revalidatePath("/", "layout");
     return { ok: "Canceled." };
@@ -397,6 +414,98 @@ export async function retryScheduled(id: string): Promise<ActionState> {
   } catch (e) {
     return fail(e);
   }
+}
+
+/* --------------------------------- Inbox --------------------------------- */
+
+export type DraftReplyState = { error?: string; draft?: string; modelLabel?: string } | null;
+
+/** Generate a reply draft with the model the user picked (Haiku by default). Never publishes. */
+export async function draftReplyAction(interactionId: string, _prev: DraftReplyState, fd: FormData): Promise<DraftReplyState> {
+  const user = await requireUser();
+  try {
+    const model = replyModel(str(fd, "model")).key;
+    const { draft, model: m } = await draftInboxReply(user.id, interactionId, model, str(fd, "guidance"));
+    revalidatePath("/inbox");
+    return { draft, modelLabel: m.label };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Explicit approval: post the reply now, or schedule it. */
+export async function postInboxReply(interactionId: string, _prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requireUser();
+  try {
+    const entry = await getOwnedInteraction(user.id, interactionId);
+    if (!entry) return { error: "Message not found" };
+    const { interaction: i, account: a } = entry;
+    if (!i.replyTarget) return { error: "This item can't be replied to from GameGarden." };
+    const mode = str(fd, "mode");
+    if (mode !== "now" && mode !== "schedule") return { error: "Choose Post now or Schedule." };
+    const settings = await getUserSettings(user.id);
+    const when = mode === "schedule" ? parseLocalInput(str(fd, "when"), settings.timezone) : new Date();
+    if (!when || (mode === "schedule" && when.getTime() < Date.now())) return { error: "Pick a future time." };
+    const text = str(fd, "text");
+    // Link to a pending plan recommendation for the same message, so the plan sees it as handled.
+    const [match] = (await listInbox(user.id, 200)).filter((e) => e.interaction.id === i.id);
+    const action = await createApprovedAction({
+      userId: user.id,
+      accountId: a.id,
+      payload: {
+        kind: "reply",
+        text,
+        target: { externalId: i.externalId, url: i.url, author: i.authorHandle, excerpt: i.text.slice(0, 280), data: i.replyTarget },
+      },
+      scheduledFor: when,
+      recommendationId: match?.planRec?.id ?? null,
+    });
+    await db.update(interactions).set({ draftText: text }).where(eq(interactions.id, i.id));
+    await log(user.id, mode === "now" ? "approved" : "scheduled", `${mode === "now" ? "Replied" : "Scheduled a reply"} to ${i.authorHandle ?? "a message"} from the Inbox`, {
+      accountId: a.id,
+      data: { interactionId: i.id, actionId: action.id },
+    });
+    if (mode === "now") {
+      const r = await executeAction(action.id);
+      if (r?.status === "failed") {
+        revalidatePath("/", "layout");
+        return { error: `Publishing failed: ${r.error}` };
+      }
+      await setInteractionStatus(i.id, "replied");
+      revalidatePath("/", "layout");
+      return { ok: "Replied!" };
+    }
+    await setInteractionStatus(i.id, "scheduled");
+    revalidatePath("/", "layout");
+    return { ok: "Reply scheduled." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function dismissInboxItem(interactionId: string): Promise<ActionState> {
+  const user = await requireUser();
+  const entry = await getOwnedInteraction(user.id, interactionId);
+  if (!entry) return { error: "Message not found" };
+  await setInteractionStatus(entry.interaction.id, "dismissed");
+  revalidatePath("/", "layout");
+  return { ok: "Dismissed." };
+}
+
+/** Check all of the user's accounts for new replies right now (no model calls). */
+export async function checkInboxNow(): Promise<ActionState> {
+  const user = await requireUser();
+  const accts = await db.select().from(socialAccounts).where(eq(socialAccounts.userId, user.id));
+  let found = 0;
+  const errors: string[] = [];
+  for (const a of accts) {
+    const r = await syncInbound(a);
+    found += r.newInteractions;
+    if (!r.ok) errors.push(`${getConnector(a.platform).name} ${a.handle}: ${r.error}`);
+  }
+  revalidatePath("/", "layout");
+  if (errors.length) return { error: errors.join("; ") };
+  return { ok: found ? `${found} new item${found === 1 ? "" : "s"}.` : "No new replies." };
 }
 
 /* -------------------------------- Compose -------------------------------- */

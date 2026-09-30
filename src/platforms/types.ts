@@ -55,6 +55,8 @@ export interface InboundInteraction {
   /** Connector data needed to reply to this interaction (null if not replyable). */
   replyTarget?: Record<string, unknown> | null;
   occurredAt: Date;
+  /** Set when the platform shows the account owner already replied (e.g. YouTube thread replies). */
+  alreadyReplied?: boolean;
 }
 
 /** A post on the platform (by someone else) worth engaging with. */

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { cancelScheduled, publishScheduledNow, retryScheduled, updateScheduled } from "@/app/actions";
 import { ActionButton, ActionForm, SubmitButton } from "./forms";
-import { btn, input } from "./ui";
+import { btn, input, inputInline } from "./ui";
 
 export function ScheduledControls({
   id,
@@ -27,7 +27,7 @@ export function ScheduledControls({
         {title != null && <input name="title" defaultValue={title} className={input} />}
         <textarea name="text" defaultValue={text} rows={4} className={input} />
         <div className="flex flex-wrap items-center gap-2">
-          <input type="datetime-local" name="when" defaultValue={whenLocal} className={`${input} w-auto`} />
+          <input type="datetime-local" name="when" defaultValue={whenLocal} className={inputInline} />
           <SubmitButton pendingText="Saving…">Save &amp; approve changes</SubmitButton>
           <button type="button" className={btn.ghost} onClick={() => setEditing(false)}>
             Cancel

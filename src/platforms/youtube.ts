@@ -180,9 +180,11 @@ export const youtube: PlatformConnector = {
           snippet: { authorDisplayName: string; authorChannelId?: { value: string }; textOriginal: string; publishedAt: string };
         };
       };
+      replies?: { comments?: { snippet: { authorChannelId?: { value: string } } }[] };
     };
+    // "replies" returns up to 5 replies per thread at no extra quota cost; used to spot threads you already answered.
     const r = await yt<{ items?: Thread[] }>(ctx, "commentThreads", {
-      part: "snippet",
+      part: "snippet,replies",
       allThreadsRelatedToChannelId: ctx.account.externalId,
       maxResults: Math.min(limit, 100),
       order: "time",
@@ -200,6 +202,7 @@ export const youtube: PlatformConnector = {
         onExternalId: t.snippet.videoId ?? null,
         replyTarget: { parentId: t.snippet.topLevelComment.id },
         occurredAt: new Date(c.publishedAt),
+        alreadyReplied: (t.replies?.comments ?? []).some((rc) => rc.snippet.authorChannelId?.value === ctx.account.externalId),
       });
     }
     return out;

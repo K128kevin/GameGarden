@@ -4,7 +4,7 @@ import { useState } from "react";
 import { composePost } from "@/app/actions";
 import type { PlatformCapabilities } from "@/platforms/types";
 import { ActionForm, SubmitButton } from "./forms";
-import { btn, input, label } from "./ui";
+import { btn, input, inputInline, label } from "./ui";
 
 type AcctOpt = { id: string; label: string; capabilities: PlatformCapabilities };
 
@@ -67,7 +67,7 @@ export function Composer({ accounts, games, defaultWhen }: { accounts: AcctOpt[]
       <div className="flex flex-wrap items-end gap-2">
         <div>
           <label className={label}>Schedule for</label>
-          <input type="datetime-local" name="when" defaultValue={defaultWhen} className={`${input} w-auto`} />
+          <input type="datetime-local" name="when" defaultValue={defaultWhen} className={inputInline} />
         </div>
         <SubmitButton name="mode" value="schedule" pendingText="Scheduling…">
           Schedule

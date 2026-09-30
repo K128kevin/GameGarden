@@ -4,6 +4,7 @@ import { activityLog, games, planRuns, plans, recommendations, scheduledActions,
 import { getUserSettings, requireUser } from "@/lib/session";
 import { formatDateTime, formatRelative, msFromNow, nextPlanSlot, slotLabelFromId } from "@/lib/time";
 import { toRecView } from "@/lib/views";
+import { listInbox } from "@/services/inbox";
 import { HeartbeatNotice } from "@/components/heartbeat-notice";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { Badge, btn, Card, CardTitle, EmptyState, Link, PageHeader, PlatformBadge, Stat } from "@/components/ui";
@@ -32,6 +33,7 @@ export default async function Dashboard() {
       .limit(6),
     db.select().from(activityLog).where(eq(activityLog.userId, user.id)).orderBy(desc(activityLog.createdAt)).limit(12),
   ]);
+  const inbox = await listInbox(user.id, 20);
   const acctMap = new Map(accts.map((a) => [a.id, a]));
   const gameNames = new Map(gameRows.map((g) => [g.id, g.name]));
   const updatedPlans = planRows.filter((p) => p.lastRunAt && (!p.lastViewedAt || p.lastRunAt > p.lastViewedAt));
@@ -138,6 +140,25 @@ export default async function Dashboard() {
         </div>
 
         <div className="space-y-6">
+          {inbox.length > 0 && (
+            <Card className="border-emerald-900/60">
+              <CardTitle action={<Link href="/inbox" className="text-xs text-emerald-300 hover:underline">Open Inbox</Link>}>
+                Replies waiting ({inbox.length})
+              </CardTitle>
+              <ul className="space-y-3">
+                {inbox.slice(0, 3).map((e) => (
+                  <li key={e.interaction.id} className="text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <PlatformBadge platform={e.account.platform} />
+                      <span className="truncate text-zinc-300">{e.interaction.authorHandle}</span>
+                      <span className="ml-auto shrink-0 text-xs text-zinc-500">{formatRelative(e.interaction.occurredAt)}</span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-zinc-400">{e.interaction.text}</p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card>
             <CardTitle action={<Link href="/schedule" className="text-xs text-emerald-300 hover:underline">View all</Link>}>
               Scheduled
