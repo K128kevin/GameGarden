@@ -27,6 +27,7 @@ import { cleanDraft } from "@/lib/drafts";
 import { formatDateTime, slotLabelFromId } from "@/lib/time";
 import { accountContext, syncAccount } from "./accounts";
 import { generatePlanUpdate, type PlanOutputT } from "./ai";
+import { repliesInFlight } from "./inbox";
 import { refreshStoreData } from "./games";
 
 type RefTarget = { accountId: string; target: RecommendationTarget };
@@ -138,6 +139,7 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
         new: c.firstSeenAt > sinceLastRun ? true : undefined,
       }));
 
+    const inFlight = await repliesInFlight([a.id]);
     const inbound = await db
       .select()
       .from(interactions)
@@ -160,7 +162,8 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
         when: formatDateTime(i.occurredAt, tz),
         newSinceLastRun: i.firstSeenAt > sinceLastRun,
         alreadyRepliedByUser: ownIds.has(i.externalId) || i.status === "replied",
-        inboxStatus: i.status === "dismissed" ? "user dismissed: no reply needed" : i.status === "scheduled" ? "reply already scheduled" : undefined,
+        inboxStatus:
+          i.status === "dismissed" ? "user dismissed: no reply needed" : inFlight.has(i.externalId) ? "reply already scheduled" : undefined,
         replyable: refs.has(ref),
       };
     });

@@ -12,12 +12,12 @@ vi.mock("@/services/llm", () => ({
 }));
 
 import { db } from "@/db";
-import { contentItems, interactions, socialAccounts, user } from "@/db/schema";
+import { contentItems, interactions, planRuns, plans, recommendations, scheduledActions, socialAccounts, user } from "@/db/schema";
 import { replyModel } from "@/lib/reply-models";
 import { connectors } from "@/platforms/registry";
 import type { InboundInteraction, OwnContent, PlatformConnector } from "@/platforms/types";
 import { checkInboundDue, syncInbound, upsertConnectedAccount } from "@/services/accounts";
-import { countInbox, draftInboxReply, listInbox, reopenInteractionForTarget, setInteractionStatus } from "@/services/inbox";
+import { countInbox, draftInboxReply, listInbox, repliesInFlight } from "@/services/inbox";
 import { createApprovedAction, executeAction } from "@/services/publisher";
 import { DRAFTING_RULES } from "@/services/drafting-rules";
 
@@ -124,12 +124,55 @@ describe("inbox", () => {
     await expect(draftInboxReply("someone-else", q1.id, "haiku", "")).rejects.toThrow(/not found/);
   });
 
-  it("a scheduled reply leaves the inbox, and comes back if canceled", async () => {
+  it("a reply scheduled from the growth plan clears the item; canceling brings it back", async () => {
     const [q1] = await db.select().from(interactions).where(and(eq(interactions.accountId, accountId), eq(interactions.externalId, "q1")));
-    await setInteractionStatus(q1.id, "scheduled");
-    expect(await countInbox(userId)).toBe(0);
-    await reopenInteractionForTarget(accountId, "q1");
+    // The planner recommended replying to q1 and the user clicked "Schedule" on the recommendation.
+    const [plan] = await db.insert(plans).values({ userId, kind: "account_growth", accountId }).returning();
+    const [run] = await db.insert(planRuns).values({ planId: plan.id, slot: "manual-test", trigger: "manual", status: "succeeded" }).returning();
+    const [rec] = await db
+      .insert(recommendations)
+      .values({
+        planId: plan.id,
+        runId: run.id,
+        userId,
+        accountId,
+        kind: "reply",
+        title: "Answer the demo question",
+        draftText: "Soon!",
+        target: { externalId: "q1", data: q1.replyTarget },
+      })
+      .returning();
     expect(await countInbox(userId)).toBe(1);
+    const action = await createApprovedAction({
+      userId,
+      accountId,
+      payload: { kind: "reply", text: "Soon!", target: { externalId: "q1", data: q1.replyTarget } },
+      scheduledFor: new Date(Date.now() + 3600_000),
+      recommendationId: rec.id,
+    });
+    expect(await countInbox(userId)).toBe(0);
+    expect((await repliesInFlight([accountId])).has("q1")).toBe(true);
+
+    // A failed reply is still "in flight" (retry lives on the Schedule page), so it stays out of the Inbox.
+    await db.update(scheduledActions).set({ status: "failed" }).where(eq(scheduledActions.id, action.id));
+    expect(await countInbox(userId)).toBe(0);
+
+    // Canceling it puts the message back.
+    await db.update(scheduledActions).set({ status: "canceled" }).where(eq(scheduledActions.id, action.id));
+    expect(await countInbox(userId)).toBe(1);
+    expect((await repliesInFlight([accountId])).has("q1")).toBe(false);
+  });
+
+  it("a scheduled *post* (not a reply) doesn't hide anything", async () => {
+    const a = await createApprovedAction({ userId, accountId, payload: { kind: "post", text: "unrelated" }, scheduledFor: new Date(Date.now() + 3600_000) });
+    expect(await countInbox(userId)).toBe(1);
+    await db.update(scheduledActions).set({ status: "canceled" }).where(eq(scheduledActions.id, a.id));
+  });
+
+  it("items left with the old 'scheduled' status come back once nothing is in flight", async () => {
+    await db.update(interactions).set({ status: "scheduled" }).where(and(eq(interactions.accountId, accountId), eq(interactions.externalId, "q1")));
+    expect(await countInbox(userId)).toBe(1);
+    await db.update(interactions).set({ status: "open" }).where(and(eq(interactions.accountId, accountId), eq(interactions.externalId, "q1")));
   });
 
   it("posting a reply (approved) removes it from the inbox", async () => {

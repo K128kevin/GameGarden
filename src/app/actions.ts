@@ -35,7 +35,6 @@ import {
   draftInboxReply,
   getOwnedInteraction,
   listInbox,
-  reopenInteractionForTarget,
   setInteractionStatus,
 } from "@/services/inbox";
 import { replyModel } from "@/lib/reply-models";
@@ -349,7 +348,6 @@ export async function cancelScheduled(id: string): Promise<ActionState> {
     if (a.recommendationId) {
       await db.update(recommendations).set({ status: "pending", statusChangedAt: new Date() }).where(eq(recommendations.id, a.recommendationId));
     }
-    if (a.payload.kind === "reply") await reopenInteractionForTarget(a.accountId, a.payload.target?.externalId);
     await log(user.id, "schedule_canceled", `Canceled scheduled ${a.payload.kind}: "${a.payload.text.slice(0, 60)}"`, { accountId: a.accountId });
     revalidatePath("/", "layout");
     return { ok: "Canceled." };
@@ -475,7 +473,6 @@ export async function postInboxReply(interactionId: string, _prev: ActionState, 
       revalidatePath("/", "layout");
       return { ok: "Replied!" };
     }
-    await setInteractionStatus(i.id, "scheduled");
     revalidatePath("/", "layout");
     return { ok: "Reply scheduled." };
   } catch (e) {
