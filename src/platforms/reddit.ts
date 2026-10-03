@@ -12,7 +12,8 @@ import {
 
 type RedditCreds = { accessToken: string; refreshToken?: string; expiresAt: number };
 
-const SCOPES = ["identity", "read", "submit", "history", "privatemessages", "mysubreddits"];
+// "vote" and "subscribe" power Like (upvote) and Follow; accounts connected before they were added must reconnect.
+const SCOPES = ["identity", "read", "submit", "history", "privatemessages", "mysubreddits", "vote", "subscribe"];
 const clientId = () => process.env.REDDIT_CLIENT_ID || "";
 const clientSecret = () => process.env.REDDIT_CLIENT_SECRET || "";
 const userAgent = () => process.env.REDDIT_USER_AGENT || "web:gamegarden:v0.1 (indie game marketing assistant)";
@@ -94,6 +95,14 @@ function toOwn(t: Thing<RPost>): OwnContent {
   };
 }
 
+/** Accounts connected before vote/subscribe scopes were added get 403 here. */
+function needsReconnect(e: unknown): never {
+  if (e instanceof PlatformError && e.reauth) {
+    throw new PlatformError("Reddit needs a new permission for this. Reconnect Reddit on the Accounts page, then try again.");
+  }
+  throw e;
+}
+
 export function normalizeSubreddit(s: string) {
   return s.trim().replace(/^\/?r\//i, "").replace(/[^\w]/g, "");
 }
@@ -108,6 +117,10 @@ export const reddit: PlatformConnector = {
     reply: true,
     requiresTitle: true,
     requiresCommunity: true,
+    like: true,
+    follow: true,
+    followLabel: "Follow",
+    followByHandle: true,
     communityLabel: "Subreddit",
     maxLength: 40000,
     notes:
@@ -181,6 +194,7 @@ export const reddit: PlatformConnector = {
         externalId: m.name,
         kind: m.type === "username_mention" ? "mention" : "reply",
         authorHandle: m.author,
+        authorId: m.author,
         text: truncate(m.body, 800),
         url: m.context ? `https://www.reddit.com${m.context}` : null,
         onExternalId: m.parent_id ?? null,
@@ -203,6 +217,7 @@ export const reddit: PlatformConnector = {
         externalId: d.name,
         url: `https://www.reddit.com${d.permalink}`,
         authorHandle: d.author,
+        authorId: d.author,
         title: d.title ?? null,
         text: truncate(d.selftext, 500),
         community: d.subreddit,
@@ -283,5 +298,28 @@ export const reddit: PlatformConnector = {
     });
     check(r);
     return { externalId: r.json.data?.name ?? "", url: r.json.data?.url ?? null, kind: "post" };
+  },
+
+  async like(ctx, target) {
+    const id = (target.data as { thingId?: string } | null)?.thingId ?? target.externalId;
+    if (!/^t[13]_/.test(id ?? "")) throw new PlatformError("Missing Reddit post or comment to upvote.");
+    await rd(ctx, "/api/vote", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ id, dir: "1" }),
+    }).catch(needsReconnect);
+    return {};
+  },
+
+  async follow(ctx, who) {
+    const name = (who.id ?? who.handle ?? "").replace(/^\/?u\//i, "").trim();
+    if (!name || name === "[deleted]") throw new PlatformError("Don't know which Reddit user to follow.");
+    // Following a Reddit user = subscribing to their profile (u_<name>). Idempotent.
+    await rd(ctx, "/api/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ action: "sub", sr_name: `u_${name}` }),
+    }).catch(needsReconnect);
+    return { url: `https://www.reddit.com/user/${name}` };
   },
 };

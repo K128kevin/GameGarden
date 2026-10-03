@@ -8,6 +8,7 @@ import { replyModelLabel } from "@/lib/reply-models";
 import { getConnector } from "@/platforms/registry";
 import { INBOUND_CHECK_MINUTES } from "@/services/accounts";
 import { INBOX_WINDOW_DAYS, listInbox } from "@/services/inbox";
+import { canFollow, canLike, followLabel } from "@/services/social-actions";
 import { ActionButton } from "@/components/forms";
 import { InboxItem } from "@/components/inbox-item";
 import { EmptyState, Link, PageHeader } from "@/components/ui";
@@ -77,6 +78,13 @@ export default async function InboxPage() {
                   savedDraftModel: e.interaction.draftModel ? replyModelLabel(e.interaction.draftModel) : null,
                   planDraft: e.planRec?.draftText ?? null,
                   defaultWhen,
+                  likeable: canLike(e.account.platform, { externalId: e.interaction.externalId, data: e.interaction.replyTarget }),
+                  followable: canFollow(e.account.platform, {
+                    externalId: e.interaction.externalId,
+                    author: e.interaction.authorHandle,
+                    authorId: e.interaction.authorId,
+                  }),
+                  followLabel: followLabel(e.account.platform),
                 }}
               />
             );

@@ -105,6 +105,10 @@ export const youtube: PlatformConnector = {
   capabilities: {
     post: false,
     reply: true,
+    // YouTube's API has no way to like comments, so only subscribing is offered.
+    like: false,
+    follow: true,
+    followLabel: "Subscribe",
     maxLength: 10000,
     notes:
       "GameGarden can comment on videos and reply to comments. Uploading videos and Community posts is not available via the API, so video/Short ideas are delivered as manual tasks with drafted titles and descriptions.",
@@ -197,6 +201,7 @@ export const youtube: PlatformConnector = {
         externalId: t.snippet.topLevelComment.id,
         kind: "comment",
         authorHandle: c.authorDisplayName,
+        authorId: c.authorChannelId?.value ?? null,
         text: truncate(c.textOriginal, 800),
         url: t.snippet.videoId ? `https://www.youtube.com/watch?v=${t.snippet.videoId}&lc=${t.snippet.topLevelComment.id}` : null,
         onExternalId: t.snippet.videoId ?? null,
@@ -229,6 +234,7 @@ export const youtube: PlatformConnector = {
             externalId: v.id,
             url: `https://www.youtube.com/watch?v=${v.id}`,
             authorHandle: v.snippet.channelTitle,
+            authorId: v.snippet.channelId,
             title: v.snippet.title,
             text: truncate(v.snippet.description, 400),
             createdAt: new Date(v.snippet.publishedAt),
@@ -273,5 +279,22 @@ export const youtube: PlatformConnector = {
       return { externalId: r.id, url: `https://www.youtube.com/watch?v=${t.videoId}&lc=${r.id}`, kind: "comment" };
     }
     throw new PlatformError("Missing YouTube reply target.");
+  },
+
+  async follow(ctx, who) {
+    const channelId = who.id?.startsWith("UC") ? who.id : null;
+    if (!channelId) throw new PlatformError("Don't know which YouTube channel to subscribe to.");
+    const url = `https://www.youtube.com/channel/${channelId}`;
+    try {
+      // Costs 50 quota units.
+      await yt(ctx, "subscriptions", { part: "snippet" }, {
+        method: "POST",
+        body: JSON.stringify({ snippet: { resourceId: { kind: "youtube#channel", channelId } } }),
+      });
+    } catch (e) {
+      if (e instanceof PlatformError && /subscriptionDuplicate/.test(e.message)) return { already: true, url };
+      throw e;
+    }
+    return { url };
   },
 };

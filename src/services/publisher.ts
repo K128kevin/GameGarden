@@ -7,9 +7,11 @@ import {
   scheduledActions,
   socialAccounts,
   type PublishPayload,
+  type SocialAccount,
 } from "@/db/schema";
 import { getConnector } from "@/platforms/registry";
 import { accountContext, upsertOwnContent } from "./accounts";
+import { canFollow, canLike, followAuthor, followLabel, likeTarget } from "./social-actions";
 
 /**
  * SAFETY INVARIANT: nothing is ever published except a scheduled_actions row
@@ -38,7 +40,39 @@ export function validatePayload(platform: string, payload: PublishPayload): stri
     return `${c.name} posts need a ${c.capabilities.communityLabel?.toLowerCase() ?? "community"}.`;
   if (c.capabilities.maxLength && payload.text.length > c.capabilities.maxLength)
     return `${c.name} posts are limited to ${c.capabilities.maxLength} characters (this is ${payload.text.length}).`;
+  if (payload.alsoLike && (payload.kind !== "reply" || !canLike(platform, payload.target)))
+    return `Liking isn't available for this ${c.name} item.`;
+  if (payload.alsoFollow && (payload.kind !== "reply" || !canFollow(platform, payload.target)))
+    return `Can't ${followLabel(platform).toLowerCase()} this ${c.name} account from GameGarden.`;
   return null;
+}
+
+/**
+ * Like / follow that the user approved together with a reply. Runs only after the
+ * reply itself posted; a failure here never undoes the reply, it's reported instead.
+ */
+async function runReplyExtras(acct: SocialAccount, payload: PublishPayload) {
+  const done: string[] = [];
+  const failed: string[] = [];
+  if (payload.kind !== "reply" || !payload.target) return { done, failed };
+  if (payload.alsoLike) {
+    try {
+      const r = await likeTarget(acct, payload.target);
+      done.push(r.already ? "already liked" : "liked");
+    } catch (e) {
+      failed.push(`liking failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (payload.alsoFollow) {
+    const verb = followLabel(acct.platform).toLowerCase();
+    try {
+      const r = await followAuthor(acct, payload.target);
+      done.push(r.already ? `already ${verb === "subscribe" ? "subscribed" : "following"}` : `${verb === "subscribe" ? "subscribed to" : "followed"} ${payload.target.author ?? "them"}`);
+    } catch (e) {
+      failed.push(`${verb === "subscribe" ? "subscribing" : "following"} failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return { done, failed };
 }
 
 /** Record a user-approved action. Call only from a user-initiated server action. */
@@ -121,9 +155,17 @@ export async function executeAction(actionId: string) {
       await db.insert(gameContent).values({ gameId, contentItemId: item.id }).onConflictDoNothing();
     }
 
+    const extras = await runReplyExtras(acct, claimed.payload);
     const [done] = await db
       .update(scheduledActions)
-      .set({ status: "published", publishedAt: new Date(), resultExternalId: result.externalId, resultUrl: result.url ?? null, error: null })
+      .set({
+        status: "published",
+        publishedAt: new Date(),
+        resultExternalId: result.externalId,
+        resultUrl: result.url ?? null,
+        // The reply itself posted; surface any like/follow problem without marking it failed.
+        error: extras.failed.length ? `Reply posted, but ${extras.failed.join("; ")}` : null,
+      })
       .where(eq(scheduledActions.id, claimed.id))
       .returning();
     if (rec) {
@@ -135,8 +177,10 @@ export async function executeAction(actionId: string) {
       accountId: acct.id,
       gameId,
       type: "published",
-      message: `Published ${claimed.payload.kind} on ${connector.name}${claimed.payload.community ? ` in r/${claimed.payload.community}` : ""}`,
-      data: { actionId: claimed.id, url: result.url, recommendationId: rec?.id ?? null },
+      message: `Published ${claimed.payload.kind} on ${connector.name}${claimed.payload.community ? ` in r/${claimed.payload.community}` : ""}${
+        extras.done.length ? ` (${extras.done.join(", ")})` : ""
+      }${extras.failed.length ? `. Note: ${extras.failed.join("; ")}` : ""}`,
+      data: { actionId: claimed.id, url: result.url, recommendationId: rec?.id ?? null, extras },
     });
     return done;
   } catch (e) {

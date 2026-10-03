@@ -5,6 +5,7 @@ import { getUserSettings, requireUser } from "@/lib/session";
 import { formatDateTime, formatRelative, msFromNow, toLocalInput } from "@/lib/time";
 import { HeartbeatNotice } from "@/components/heartbeat-notice";
 import { ScheduledControls } from "@/components/scheduled-item";
+import { followLabel } from "@/services/social-actions";
 import { Badge, btn, EmptyState, ExternalLink, Link, PageHeader, PlatformBadge, StatusBadge } from "@/components/ui";
 
 export const maxDuration = 60;
@@ -41,6 +42,8 @@ export default async function SchedulePage() {
           <span className="text-zinc-400">{acct?.handle}</span>
           <Badge>{a.payload.kind}</Badge>
           {a.payload.community && <Badge color="amber">r/{a.payload.community}</Badge>}
+          {a.payload.alsoLike && <Badge color="green">+ like</Badge>}
+          {a.payload.alsoFollow && <Badge color="green">+ {acct ? followLabel(acct.platform).toLowerCase() : "follow"}</Badge>}
           {a.gameId && gameNames.get(a.gameId) && <Badge color="violet">{gameNames.get(a.gameId)}</Badge>}
           <StatusBadge status={a.status} />
           {overdue && <Badge color="amber">overdue</Badge>}

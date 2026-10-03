@@ -8,6 +8,7 @@ import {
   interactions,
   plans,
   recommendations,
+  scheduledActions,
   socialAccounts,
   type Interaction,
   type SocialAccount,
@@ -17,21 +18,44 @@ import { replyModel, type ReplyModelKey } from "@/lib/reply-models";
 import { getConnector } from "@/platforms/registry";
 import { truncate } from "@/platforms/types";
 import { DRAFTING_RULES } from "./drafting-rules";
-import { generateReplyText } from "./llm";
+import { generateDraftText } from "./llm";
 
 /** Kinds of inbound activity that call for a reply. */
 export const REPLYABLE_KINDS = ["reply", "mention", "comment", "quote"] as const;
 export const INBOX_WINDOW_DAYS = 7;
 
+/** A scheduled reply in one of these states counts as "handled" for the Inbox. */
+const ACTIVE_REPLY_STATUSES = sql`('scheduled', 'publishing', 'failed')`;
+
+/** External ids of messages that have a reply in flight on these accounts. */
+export async function repliesInFlight(accountIds: string[]): Promise<Set<string>> {
+  if (!accountIds.length) return new Set();
+  const rows = await db
+    .select({ target: sql<string | null>`${scheduledActions.payload}->'target'->>'externalId'` })
+    .from(scheduledActions)
+    .where(
+      and(
+        inArray(scheduledActions.accountId, accountIds),
+        sql`${scheduledActions.status} in ${ACTIVE_REPLY_STATUSES}`,
+        sql`${scheduledActions.payload}->>'kind' = 'reply'`,
+      ),
+    );
+  return new Set(rows.map((r) => r.target).filter(Boolean) as string[]);
+}
+
 function inboxWhere(userId: string) {
   return and(
     eq(socialAccounts.userId, userId),
-    eq(interactions.status, "open"),
+    // "scheduled" is a legacy status from earlier versions; whether a reply is in flight is checked below.
+    inArray(interactions.status, ["open", "scheduled"]),
     inArray(interactions.kind, [...REPLYABLE_KINDS]),
     isNotNull(interactions.replyTarget),
     gt(interactions.occurredAt, sql`now() - make_interval(days => ${INBOX_WINDOW_DAYS})`),
     // Hide anything the user has already answered (on the platform or via GameGarden).
     sql`not exists (select 1 from ${contentItems} ci where ci.account_id = ${interactions.accountId} and ci.parent_external_id = ${interactions.externalId})`,
+    // Hide anything with a reply already in flight, however it was scheduled (growth plan, Inbox, retry).
+    // Canceling that reply brings the item back automatically.
+    sql`not exists (select 1 from ${scheduledActions} sa where sa.account_id = ${interactions.accountId} and sa.status in ${ACTIVE_REPLY_STATUSES} and sa.payload->>'kind' = 'reply' and sa.payload->'target'->>'externalId' = ${interactions.externalId})`,
   );
 }
 
@@ -158,7 +182,7 @@ export async function draftInboxReply(userId: string, interactionId: string, mod
   if (!entry) throw new Error("Message not found");
   const m = replyModel(model);
   const prompt = await buildReplyPrompt(entry, guidance.trim().slice(0, 500));
-  const result = await generateReplyText({ model: m.key, system: REPLY_SYSTEM, prompt });
+  const result = await generateDraftText({ model: m.key, system: REPLY_SYSTEM, prompt });
   const draft = cleanDraft(result.text.replace(/^["“]|["”]$/g, ""));
   if (!draft) throw new Error("The model returned an empty draft. Try again.");
   await db
@@ -175,15 +199,6 @@ export async function draftInboxReply(userId: string, interactionId: string, mod
   return { draft, model: m };
 }
 
-export async function setInteractionStatus(interactionId: string, status: "open" | "scheduled" | "replied" | "dismissed") {
+export async function setInteractionStatus(interactionId: string, status: "open" | "replied" | "dismissed") {
   await db.update(interactions).set({ status }).where(eq(interactions.id, interactionId));
-}
-
-/** When a scheduled reply is canceled, put its inbox item back. */
-export async function reopenInteractionForTarget(accountId: string, targetExternalId: string | undefined | null) {
-  if (!targetExternalId) return;
-  await db
-    .update(interactions)
-    .set({ status: "open" })
-    .where(and(eq(interactions.accountId, accountId), eq(interactions.externalId, targetExternalId), eq(interactions.status, "scheduled")));
 }

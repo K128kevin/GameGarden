@@ -297,6 +297,7 @@ GameGarden already keeps each user's data separate. When you're ready to let oth
 | "No YouTube channel found" | That Google account has no channel. Reconnect and choose the Brand Account that owns the channel. |
 | YouTube `quotaExceeded` | The daily quota resets at midnight Pacific. Reduce manual runs, or request more quota in the Cloud console. |
 | Reddit shows "not configured" | The Reddit variables aren't set yet (see §5c). |
+| Reddit like or follow says it needs a new permission | Liking (upvoting) and following were added after your Reddit account was connected. Reconnect Reddit on the Accounts page to grant the `vote` and `subscribe` permissions. |
 | Reddit 401/403 after connecting | The app isn't approved yet, or `REDDIT_USER_AGENT` doesn't follow the `web:name:version (by /u/you)` format. |
 | Bluesky "login failed" | The app password was revoked or mistyped. Create a new one and reconnect. |
 | All connected accounts suddenly error | `ENCRYPTION_KEY` changed. Restore the original value, or reconnect every account. |

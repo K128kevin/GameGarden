@@ -1,4 +1,4 @@
-import type { PublishPayload } from "@/db/schema";
+import type { PublishPayload, RecommendationTarget } from "@/db/schema";
 
 /**
  * Everything GameGarden knows about a social platform lives behind this
@@ -49,6 +49,8 @@ export interface InboundInteraction {
   externalId: string;
   kind: "reply" | "mention" | "comment" | "quote" | "follow" | "like";
   authorHandle?: string | null;
+  /** Stable platform id of the author, used to follow them (Bluesky DID, Reddit username, YouTube channel id). */
+  authorId?: string | null;
   text: string;
   url?: string | null;
   onExternalId?: string | null;
@@ -64,6 +66,8 @@ export interface DiscoveredPost {
   externalId: string;
   url?: string | null;
   authorHandle?: string | null;
+  /** Stable platform id of the author, used to follow them. */
+  authorId?: string | null;
   authorFollowers?: number | null;
   title?: string | null;
   text: string;
@@ -100,6 +104,14 @@ export interface PlatformCapabilities {
   requiresCommunity?: boolean;
   communityLabel?: string;
   maxLength?: number;
+  /** Can like/upvote a specific post or comment (see PlatformConnector.like). */
+  like?: boolean;
+  /** Can follow/subscribe to another user (see PlatformConnector.follow). */
+  follow?: boolean;
+  /** Verb shown on buttons, e.g. "Follow" or "Subscribe". */
+  followLabel?: string;
+  /** follow() works with just a handle (no stable id needed). */
+  followByHandle?: boolean;
   /** Human notes shown to the user and the planner. */
   notes?: string;
 }
@@ -141,6 +153,10 @@ export interface PlatformConnector {
   /** Does this URL belong to this platform? */
   matchesUrl(url: string): boolean;
   publish(ctx: AccountContext, payload: PublishPayload): Promise<PublishResult>;
+  /** Like/upvote the post or comment described by a reply target (capabilities.like). */
+  like?(ctx: AccountContext, target: RecommendationTarget): Promise<{ already?: boolean }>;
+  /** Follow/subscribe to a user by platform id and/or handle (capabilities.follow). */
+  follow?(ctx: AccountContext, who: { id?: string | null; handle?: string | null }): Promise<{ already?: boolean; url?: string | null }>;
 }
 
 export class PlatformError extends Error {

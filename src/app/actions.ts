@@ -35,10 +35,11 @@ import {
   draftInboxReply,
   getOwnedInteraction,
   listInbox,
-  reopenInteractionForTarget,
   setInteractionStatus,
 } from "@/services/inbox";
 import { replyModel } from "@/lib/reply-models";
+import { regenerateRecommendationDraft } from "@/services/regenerate";
+import { followAuthor, followLabel } from "@/services/social-actions";
 import { clearPlanHistory, runPlan } from "@/services/planner";
 import { createApprovedAction, executeAction, validatePayload } from "@/services/publisher";
 import { parseSteamAppId } from "@/stores/steam";
@@ -245,7 +246,43 @@ function payloadFromForm(rec: typeof recommendations.$inferSelect, fd: FormData)
     community: str(fd, "community") || null,
     link: rec.link,
     target: rec.target,
+    ...(rec.kind === "reply" ? { alsoLike: fd.get("alsoLike") === "on", alsoFollow: fd.get("alsoFollow") === "on" } : {}),
   };
+}
+
+/** One-click Follow for a "follow" recommendation (the click is the approval). */
+export async function followFromRecommendation(recId: string): Promise<ActionState> {
+  const user = await requireUser();
+  try {
+    const rec = await ownedRec(user.id, recId);
+    if (!rec.accountId || !rec.target) return { error: "This suggestion doesn't say who to follow." };
+    const acct = await getOwnedAccount(user.id, rec.accountId);
+    if (!acct) return { error: "Account not found" };
+    const verb = followLabel(acct.platform);
+    const r = await followAuthor(acct, rec.target);
+    const who = rec.target.author ?? "them";
+    const note = r.already ? `Already ${verb === "Subscribe" ? "subscribed to" : "following"} ${who}` : `${verb === "Subscribe" ? "Subscribed to" : "Followed"} ${who} via GameGarden`;
+    await db.update(recommendations).set({ status: "done", statusChangedAt: new Date(), userNote: note }).where(eq(recommendations.id, rec.id));
+    await log(user.id, "followed", note, { planId: rec.planId, accountId: acct.id, gameId: rec.gameId, data: { recommendationId: rec.id, url: r.url } });
+    revalidatePath("/", "layout");
+    return { ok: note };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export type RegenerateState = { error?: string; draft?: string; title?: string | null } | null;
+
+/** Rewrite a suggested draft with Haiku, optionally following the user's note. Never publishes. */
+export async function regenerateRecommendationAction(recId: string, _prev: RegenerateState, fd: FormData): Promise<RegenerateState> {
+  const user = await requireUser();
+  try {
+    const r = await regenerateRecommendationDraft(user.id, recId, str(fd, "note"), str(fd, "current"));
+    revalidatePath("/", "layout");
+    return { draft: r.draft, title: r.title };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /**
@@ -349,7 +386,6 @@ export async function cancelScheduled(id: string): Promise<ActionState> {
     if (a.recommendationId) {
       await db.update(recommendations).set({ status: "pending", statusChangedAt: new Date() }).where(eq(recommendations.id, a.recommendationId));
     }
-    if (a.payload.kind === "reply") await reopenInteractionForTarget(a.accountId, a.payload.target?.externalId);
     await log(user.id, "schedule_canceled", `Canceled scheduled ${a.payload.kind}: "${a.payload.text.slice(0, 60)}"`, { accountId: a.accountId });
     revalidatePath("/", "layout");
     return { ok: "Canceled." };
@@ -455,7 +491,16 @@ export async function postInboxReply(interactionId: string, _prev: ActionState, 
       payload: {
         kind: "reply",
         text,
-        target: { externalId: i.externalId, url: i.url, author: i.authorHandle, excerpt: i.text.slice(0, 280), data: i.replyTarget },
+        target: {
+          externalId: i.externalId,
+          url: i.url,
+          author: i.authorHandle,
+          authorId: i.authorId,
+          excerpt: i.text.slice(0, 280),
+          data: i.replyTarget,
+        },
+        alsoLike: fd.get("alsoLike") === "on",
+        alsoFollow: fd.get("alsoFollow") === "on",
       },
       scheduledFor: when,
       recommendationId: match?.planRec?.id ?? null,
@@ -475,7 +520,6 @@ export async function postInboxReply(interactionId: string, _prev: ActionState, 
       revalidatePath("/", "layout");
       return { ok: "Replied!" };
     }
-    await setInteractionStatus(i.id, "scheduled");
     revalidatePath("/", "layout");
     return { ok: "Reply scheduled." };
   } catch (e) {
