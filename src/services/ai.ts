@@ -8,9 +8,9 @@ export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 
 export const RecommendationOutput = z.object({
   kind: z
-    .enum(["post", "reply", "engage", "content", "profile", "other"])
+    .enum(["post", "reply", "follow", "engage", "content", "profile", "other"])
     .describe(
-      "post = new top-level post to publish; reply = reply/comment on a specific targetRef; engage = manual engagement (follow/like/join a community); content = something to create offline (video, devlog, GIF, trailer); profile = improve bio/links/pinned post; other = anything else",
+      "post = new top-level post to publish; reply = reply/comment on a specific targetRef; follow = follow the author of the item in targetRef; engage = other manual engagement (join a community, like something without a ref); content = something to create offline (video, devlog, GIF, trailer); profile = improve bio/links/pinned post; other = anything else",
     ),
   accountRef: z.string().describe("Ref of the account this applies to, e.g. A1"),
   title: z.string().describe("Short imperative summary shown to the user"),
@@ -23,7 +23,9 @@ export const RecommendationOutput = z.object({
   draftTitle: z.string().describe("Title for Reddit posts or video ideas, in the same human voice. No em dashes. Empty string if not applicable."),
   community: z.string().describe("Subreddit name without r/ for Reddit posts. Empty string otherwise."),
   link: z.string().describe("URL to include (e.g. Steam/itch page) or empty string."),
-  targetRef: z.string().describe("Ref of the item being replied to (I# or D#). Required for replies, empty string otherwise."),
+  targetRef: z
+    .string()
+    .describe("Ref (I# or D#) of the item being replied to (reply), or of a post by the person to follow (follow). Empty string otherwise."),
   suggestedTime: z.string().describe("ISO 8601 timestamp with UTC offset for when to do this"),
   priority: z.enum(["high", "medium", "low"]),
 });
@@ -63,6 +65,7 @@ ${DRAFTING_RULES}
 - Replies must add value to the conversation (answer, encourage, share a relevant insight). Only mention the user's own game in a reply when it is clearly welcome and relevant.
 - Respect platform norms: Bluesky posts must be ≤ 300 characters including any link. Reddit posts need draftTitle and community, must follow that subreddit's self-promotion rules (most indie subs expect ~90% genuine participation; promotional posts only in appropriate subs or designated threads), and should read like a real community member, not an ad. YouTube cannot publish videos or community posts through GameGarden. Deliver video/Short ideas as kind "content" with draftTitle and a description/outline in draftText; YouTube replies/comments are fine.
 - Skip interactions where alreadyRepliedByUser is true or an inboxStatus is set: the user handles quick replies in their Inbox between runs.
+- To suggest following someone (a fellow developer in the niche, an engaged fan, a relevant creator or curator), use kind "follow" with targetRef set to the I# or D# item of theirs that has canFollow true; GameGarden shows a one-click Follow button. Suggest at most two or three follows per run, only for people genuinely relevant to the user, and never as mass-follow tactics. Follows need no draftText.
 - Only use kind "post" or "reply" on accounts whose capabilities allow it; replies must reference a valid I# or D# targetRef from the input. Never invent refs, URLs, stats, or quotes.
 - Don't repeat recommendations the user dismissed unless something has changed; learn from their notes. If a previously pending recommendation (R#) is still a good idea, re-issue it (possibly improved); if the data shows the user already did it manually, list it in completedRefs.
 - suggestedTime must be in the future (at least 15 minutes after "now"), chosen for when the audience is most active (use the timing learnings in the strategy and observed engagement). Spread posts out; don't stack multiple original posts on one account within a few hours.
@@ -117,7 +120,7 @@ export async function generatePlanUpdate(context: unknown): Promise<{
   };
 }
 
-const KINDS = new Set(["post", "reply", "engage", "content", "profile", "other"]);
+const KINDS = new Set(["post", "reply", "follow", "engage", "content", "profile", "other"]);
 const PRIORITIES = new Set(["high", "medium", "low"]);
 
 /** Be forgiving about enum values and missing optional strings instead of failing a whole run. */

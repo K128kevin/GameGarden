@@ -36,12 +36,12 @@ beforeAll(async () => {
 });
 afterAll(() => server.close());
 
-describe("generateReplyText", () => {
+describe("generateDraftText", () => {
   it("sends the right settings for each model", async () => {
-    const { generateReplyText } = await import("@/services/llm");
-    const haiku = await generateReplyText({ model: "haiku", system: "s", prompt: "p" });
-    const sonnet = await generateReplyText({ model: "sonnet", system: "s", prompt: "p" });
-    const opus = await generateReplyText({ model: "opus", system: "s", prompt: "p" });
+    const { generateDraftText } = await import("@/services/llm");
+    const haiku = await generateDraftText({ model: "haiku", system: "s", prompt: "p" });
+    const sonnet = await generateDraftText({ model: "sonnet", system: "s", prompt: "p" });
+    const opus = await generateDraftText({ model: "opus", system: "s", prompt: "p" });
     expect([haiku.text, sonnet.text, opus.text]).toEqual(["Thanks! Demo soon.", "Thanks! Demo soon.", "Thanks! Demo soon."]);
 
     const [h, s, o] = bodies;

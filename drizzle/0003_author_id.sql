@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "author_id" text;

@@ -10,6 +10,7 @@ Social media marketing and account growth for indie game developers.
   3. sends all of that, plus the long-term strategy, earlier run assessments, and the history of past recommendations (what you scheduled, dismissed and why, or ignored), to Claude;
   4. stores an assessment of what changed, a revised long-term strategy, and new recommended actions. Posts and replies come with drafts and suggested times.
 - **Inbox for fast replies:** between plan runs, GameGarden checks each account for new replies, mentions and comments about every 30 minutes (no AI call) and lists the ones waiting on you. Click **Draft reply** to have Haiku 4.5 (default), Sonnet 5.5 or Opus 5.5 write one in your voice, then edit, post or schedule it.
+- **Follow, like and regenerate:** follow suggestions come with a one-click **Follow** button (Bluesky, Reddit, YouTube subscribe). When you approve a reply you can tick **Also like** and/or **Also follow**, and they happen when the reply posts. Any drafted suggestion can be rewritten with Haiku, with an optional note ("shorter", "mention the demo").
 - **Approval first:** schedule a recommendation for its suggested time with one click, edit it, pick another time, or post it now. **Nothing is ever posted unless you clicked Post now or scheduled it yourself.**
 - **Clear signals:** plans updated since you last looked get a "new" badge in the nav and a banner on the dashboard and plan page.
 - **History:** every run, recommendation, and action is kept, and each plan has a **Clear history** button.

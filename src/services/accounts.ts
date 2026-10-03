@@ -153,6 +153,7 @@ async function upsertInteractions(accountId: string, inbound: InboundInteraction
         externalId: i.externalId,
         kind: i.kind,
         authorHandle: i.authorHandle ?? null,
+        authorId: i.authorId ?? null,
         text: i.text,
         url: i.url ?? null,
         onExternalId: i.onExternalId ?? null,
@@ -163,6 +164,17 @@ async function upsertInteractions(accountId: string, inbound: InboundInteraction
     )
     .onConflictDoNothing()
     .returning({ id: interactions.id });
+  // Backfill author ids on rows stored before they were tracked (needed to follow people).
+  const withAuthor = inbound.filter((i) => i.authorId);
+  if (withAuthor.length) {
+    const values = sql.join(
+      withAuthor.map((i) => sql`(${i.externalId}, ${i.authorId})`),
+      sql`, `,
+    );
+    await db.execute(
+      sql`update ${interactions} set author_id = v.aid from (values ${values}) as v(eid, aid) where ${interactions.accountId} = ${accountId} and ${interactions.externalId} = v.eid and ${interactions.authorId} is null`,
+    );
+  }
   const answered = inbound.filter((i) => i.alreadyReplied).map((i) => i.externalId);
   if (answered.length) {
     await db

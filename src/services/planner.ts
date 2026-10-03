@@ -148,10 +148,19 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
       .limit(40);
     const interactionsCtx = inbound.map((i) => {
       const ref = `I${++iCount}`;
-      if (i.replyTarget && connector.capabilities.reply) {
+      const replyable = Boolean(i.replyTarget && connector.capabilities.reply);
+      const canFollow = Boolean((i.authorId || i.authorHandle) && connector.capabilities.follow);
+      if (replyable || canFollow) {
         refs.set(ref, {
           accountId: a.id,
-          target: { externalId: i.externalId, url: i.url, author: i.authorHandle, excerpt: truncate(i.text, 280), data: i.replyTarget },
+          target: {
+            externalId: i.externalId,
+            url: i.url,
+            author: i.authorHandle,
+            authorId: i.authorId,
+            excerpt: truncate(i.text, 280),
+            data: i.replyTarget,
+          },
         });
       }
       return {
@@ -164,7 +173,8 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
         alreadyRepliedByUser: ownIds.has(i.externalId) || i.status === "replied",
         inboxStatus:
           i.status === "dismissed" ? "user dismissed: no reply needed" : inFlight.has(i.externalId) ? "reply already scheduled" : undefined,
-        replyable: refs.has(ref),
+        replyable,
+        canFollow: canFollow || undefined,
       };
     });
     // Aggregate likes/follows instead of listing each.
@@ -174,15 +184,18 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
 
     const discoveredCtx = (discovered.get(a.id) ?? []).map((d) => {
       const ref = `D${++dCount}`;
-      if (d.replyTarget && connector.capabilities.reply) {
+      const replyable = Boolean(d.replyTarget && connector.capabilities.reply);
+      const canFollow = Boolean((d.authorId || d.authorHandle) && connector.capabilities.follow);
+      if (replyable || canFollow) {
         refs.set(ref, {
           accountId: a.id,
           target: {
             externalId: d.externalId,
             url: d.url,
             author: d.authorHandle,
+            authorId: d.authorId,
             community: d.community,
-            excerpt: truncate(d.title ? `${d.title} — ${d.text}` : d.text, 280),
+            excerpt: truncate(d.title ? `${d.title}: ${d.text}` : d.text, 280),
             data: d.replyTarget,
           },
         });
@@ -196,6 +209,8 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
         posted: formatDateTime(d.createdAt, tz),
         metrics: d.metrics,
         matchedQuery: d.matchedQuery,
+        replyable: replyable || undefined,
+        canFollow: canFollow || undefined,
       };
     });
 
@@ -368,7 +383,13 @@ async function persistOutput(
     let target: RecommendationTarget | null = null;
     if (kind === "reply") {
       const ref = built.refs.get(r.targetRef);
-      if (!ref || (acct && ref.accountId !== acct.id)) kind = "engage"; // invalid target → manual task
+      // Invalid or non-replyable target → manual task.
+      if (!ref || (acct && ref.accountId !== acct.id) || !ref.target.data || !connector?.capabilities.reply) kind = "engage";
+      else target = ref.target;
+    } else if (kind === "follow") {
+      const ref = built.refs.get(r.targetRef);
+      const who = ref?.target.authorId || ref?.target.author;
+      if (!ref || (acct && ref.accountId !== acct.id) || !who || !connector?.capabilities.follow) kind = "engage";
       else target = ref.target;
     }
     if (kind === "post" && connector && !connector.capabilities.post) kind = "content";

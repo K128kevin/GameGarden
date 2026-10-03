@@ -18,7 +18,7 @@ import { replyModel, type ReplyModelKey } from "@/lib/reply-models";
 import { getConnector } from "@/platforms/registry";
 import { truncate } from "@/platforms/types";
 import { DRAFTING_RULES } from "./drafting-rules";
-import { generateReplyText } from "./llm";
+import { generateDraftText } from "./llm";
 
 /** Kinds of inbound activity that call for a reply. */
 export const REPLYABLE_KINDS = ["reply", "mention", "comment", "quote"] as const;
@@ -182,7 +182,7 @@ export async function draftInboxReply(userId: string, interactionId: string, mod
   if (!entry) throw new Error("Message not found");
   const m = replyModel(model);
   const prompt = await buildReplyPrompt(entry, guidance.trim().slice(0, 500));
-  const result = await generateReplyText({ model: m.key, system: REPLY_SYSTEM, prompt });
+  const result = await generateDraftText({ model: m.key, system: REPLY_SYSTEM, prompt });
   const draft = cleanDraft(result.text.replace(/^["“]|["”]$/g, ""));
   if (!draft) throw new Error("The model returned an empty draft. Try again.");
   await db

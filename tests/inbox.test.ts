@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 const calls: { model: string; system: string; prompt: string }[] = [];
 vi.mock("@/services/llm", () => ({
   anthropic: vi.fn(),
-  generateReplyText: vi.fn(async (opts: { model: string; system: string; prompt: string }) => {
+  generateDraftText: vi.fn(async (opts: { model: string; system: string; prompt: string }) => {
     calls.push(opts);
     return { text: '"Thanks so much — the demo is coming soon!"', model: opts.model, inputTokens: 10, outputTokens: 5 };
   }),

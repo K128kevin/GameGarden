@@ -89,6 +89,10 @@ export const bluesky: PlatformConnector = {
   capabilities: {
     post: true,
     reply: true,
+    like: true,
+    follow: true,
+    followLabel: "Follow",
+    followByHandle: true,
     maxLength: 300,
     notes: "Posts are limited to 300 characters. Hashtags and links are auto-detected.",
   },
@@ -176,6 +180,7 @@ export const bluesky: PlatformConnector = {
         externalId: n.uri,
         kind,
         authorHandle: n.author.handle,
+        authorId: n.author.did,
         text: replyable ? postText(n.record) : "",
         url: replyable ? bskyPostUrl(n.author.handle, n.uri) : `https://bsky.app/profile/${n.author.handle}`,
         onExternalId: n.reasonSubject ?? null,
@@ -202,6 +207,7 @@ export const bluesky: PlatformConnector = {
             externalId: p.uri,
             url: bskyPostUrl(p.author.handle, p.uri),
             authorHandle: p.author.handle,
+            authorId: p.author.did,
             text: truncate(postText(p.record), 500),
             createdAt: new Date((p.record as { createdAt?: string }).createdAt ?? p.indexedAt),
             metrics: { likes: p.likeCount ?? 0, reposts: p.repostCount ?? 0, replies: p.replyCount ?? 0 },
@@ -256,5 +262,27 @@ export const bluesky: PlatformConnector = {
       url: bskyPostUrl(ctx.account.handle, res.uri),
       kind: reply ? "reply" : "post",
     };
+  },
+
+  async like(ctx, target) {
+    const t = (target.data ?? {}) as { uri?: string; cid?: string };
+    if (!t.uri || !t.cid) throw new PlatformError("Missing Bluesky post to like.");
+    const agent = await agentFor(ctx);
+    const { data } = await agent.getPosts({ uris: [t.uri] });
+    if (data.posts[0]?.viewer?.like) return { already: true };
+    await agent.like(t.uri, t.cid);
+    return {};
+  },
+
+  async follow(ctx, who) {
+    const agent = await agentFor(ctx);
+    let did = who.id?.startsWith("did:") ? who.id : null;
+    if (!did && who.handle) did = (await agent.resolveHandle({ handle: who.handle.replace(/^@/, "") })).data.did;
+    if (!did) throw new PlatformError("Don't know which Bluesky account to follow.");
+    const { data } = await agent.getProfile({ actor: did });
+    const url = `https://bsky.app/profile/${data.handle}`;
+    if (data.viewer?.following) return { already: true, url };
+    await agent.follow(did);
+    return { url };
   },
 };

@@ -20,6 +20,9 @@ export type InboxItemView = {
   savedDraftModel: string | null;
   planDraft: string | null;
   defaultWhen: string;
+  likeable: boolean;
+  followable: boolean;
+  followLabel: string;
 };
 
 function ModelPicker({ defaultValue }: { defaultValue: string }) {
@@ -107,6 +110,22 @@ export function InboxItem({ item }: { item: InboxItemView }) {
           {max && (
             <div className={`text-right text-xs ${text.length > max ? "text-red-400" : "text-zinc-500"}`}>
               {text.length}/{max}
+            </div>
+          )}
+          {(item.likeable || item.followable) && (
+            <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-300">
+              {item.likeable && (
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="alsoLike" className="h-4 w-4 accent-emerald-500" /> Also like their {item.kind === "comment" ? "comment" : "post"}
+                </label>
+              )}
+              {item.followable && (
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="alsoFollow" className="h-4 w-4 accent-emerald-500" /> Also {item.followLabel.toLowerCase()}{" "}
+                  {item.author ?? "them"}
+                </label>
+              )}
+              <span className="text-xs text-zinc-500">Done together with the reply, when it posts.</span>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">

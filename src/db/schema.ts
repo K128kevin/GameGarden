@@ -176,6 +176,7 @@ export const interactions = pgTable(
     externalId: text("external_id").notNull(),
     kind: text("kind").notNull(), // reply | mention | comment | quote | follow | like
     authorHandle: text("author_handle"),
+    authorId: text("author_id"),
     text: text("text").notNull().default(""),
     url: text("url"),
     onExternalId: text("on_external_id"),
@@ -357,9 +358,11 @@ export type RecommendationTarget = {
   externalId: string;
   url?: string | null;
   author?: string | null;
+  /** Stable platform id of the author (for following them). */
+  authorId?: string | null;
   excerpt?: string | null;
   community?: string | null;
-  /** Connector-specific data needed to reply (e.g. Bluesky cid/root). */
+  /** Connector-specific data needed to reply or like (e.g. Bluesky uri/cid/root). */
   data?: Record<string, unknown> | null;
 };
 
@@ -370,6 +373,10 @@ export type PublishPayload = {
   community?: string | null;
   link?: string | null;
   target?: RecommendationTarget | null;
+  /** Approved together with a reply: also like the post/comment being replied to. */
+  alsoLike?: boolean;
+  /** Approved together with a reply: also follow the author being replied to. */
+  alsoFollow?: boolean;
 };
 
 /**

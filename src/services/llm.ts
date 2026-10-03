@@ -18,11 +18,11 @@ export function anthropic(): Anthropic {
 export type TextResult = { text: string; model: string; inputTokens: number; outputTokens: number };
 
 /**
- * Short plain-text generation for inbox reply drafts. Request shape differs by model:
+ * Short plain-text generation for drafts (inbox replies, regenerated suggestions). Request shape differs by model:
  * Haiku 4.5 takes no effort/adaptive-thinking settings; Sonnet 5.5 and Opus 5.5 use
  * adaptive thinking with an explicit effort.
  */
-export async function generateReplyText(opts: { model: ReplyModelKey; system: string; prompt: string }): Promise<TextResult> {
+export async function generateDraftText(opts: { model: ReplyModelKey; system: string; prompt: string }): Promise<TextResult> {
   const m = replyModel(opts.model);
   const params: Anthropic.MessageCreateParamsNonStreaming = {
     model: m.id,

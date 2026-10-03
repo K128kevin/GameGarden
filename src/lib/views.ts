@@ -1,6 +1,7 @@
 import type { Recommendation, SocialAccount } from "@/db/schema";
 import { findConnector } from "@/platforms/registry";
 import type { RecView } from "@/components/recommendation-card";
+import { canFollow, canLike, followLabel } from "@/services/social-actions";
 import { formatDateTime, toLocalInput } from "./time";
 
 export function toRecView(
@@ -34,5 +35,8 @@ export function toRecView(
         ? { platform: c.id, platformName: c.name, badgeClass: c.badgeClass, handle: acct.handle, capabilities: c.capabilities }
         : null,
     gameName: r.gameId ? (gameNames?.get(r.gameId) ?? null) : null,
+    likeable: Boolean(acct && r.kind === "reply" && canLike(acct.platform, r.target)),
+    followable: Boolean(acct && (r.kind === "reply" || r.kind === "follow") && canFollow(acct.platform, r.target)),
+    followLabel: acct ? followLabel(acct.platform) : "Follow",
   };
 }

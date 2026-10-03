@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { approveRecommendation, setRecommendationStatus } from "@/app/actions";
+import { useActionState, useState } from "react";
+import {
+  approveRecommendation,
+  followFromRecommendation,
+  regenerateRecommendationAction,
+  setRecommendationStatus,
+  type RegenerateState,
+} from "@/app/actions";
 import type { PlatformCapabilities } from "@/platforms/types";
-import { ActionForm, SubmitButton } from "./forms";
-import { btn, input, inputInline } from "./ui";
+import { ActionButton, ActionForm, SubmitButton } from "./forms";
+import { btn, input, inputInline, Notice } from "./ui";
 
 export type RecView = {
   id: string;
@@ -24,11 +30,17 @@ export type RecView = {
   target: { url?: string | null; author?: string | null; excerpt?: string | null; community?: string | null } | null;
   account: { platform: string; platformName: string; badgeClass: string; handle: string; capabilities: PlatformCapabilities } | null;
   gameName?: string | null;
+  /** The reply's target can be liked from GameGarden. */
+  likeable: boolean;
+  /** The target's author can be followed from GameGarden. */
+  followable: boolean;
+  followLabel: string;
 };
 
 const kindLabel: Record<string, string> = {
   post: "New post",
   reply: "Reply",
+  follow: "Follow",
   engage: "Engage",
   content: "Create content",
   profile: "Profile",
@@ -49,6 +61,19 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
   const publishable = (rec.kind === "post" || rec.kind === "reply") && rec.account != null;
   const open = rec.status === "pending" || rec.status === "failed" || rec.status === "expired";
   const [text, setText] = useState(rec.draftText ?? "");
+  const [title, setTitle] = useState(rec.draftTitle ?? "");
+  const [regen, regenAction, regenerating] = useActionState<RegenerateState, FormData>(
+    regenerateRecommendationAction.bind(null, rec.id),
+    null,
+  );
+  const [adopted, setAdopted] = useState<RegenerateState>(null);
+  // Adopt a freshly regenerated draft into the editor (once per result).
+  if (regen?.draft && regen !== adopted) {
+    setAdopted(regen);
+    setText(regen.draft);
+    if (regen.title) setTitle(regen.title);
+  }
+  const canRegenerate = open && rec.kind !== "follow" && (Boolean(rec.draftText) || publishable);
   const [showTime, setShowTime] = useState(false);
   const [showDismiss, setShowDismiss] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -81,7 +106,8 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
       {rec.target && (
         <div className="mt-3 rounded-md border-l-2 border-zinc-600 bg-zinc-950/50 px-3 py-2 text-sm">
           <div className="text-xs text-zinc-500">
-            Replying to {rec.target.author ? `@${rec.target.author}` : "post"}
+            {rec.kind === "follow" ? "From a post by " : "Replying to "}
+            {rec.target.author ? `@${rec.target.author}` : "post"}
             {rec.target.community ? ` in r/${rec.target.community}` : ""} ·{" "}
             {rec.target.url && (
               <a href={rec.target.url} target="_blank" rel="noreferrer" className="text-emerald-300 hover:underline">
@@ -90,6 +116,38 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
             )}
           </div>
           <p className="mt-0.5 whitespace-pre-wrap text-zinc-300">{rec.target.excerpt}</p>
+        </div>
+      )}
+
+      {rec.kind === "follow" && open && rec.followable && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <ActionButton
+            action={followFromRecommendation.bind(null, rec.id)}
+            className={btn.primary}
+            pendingText={`${rec.followLabel === "Subscribe" ? "Subscribing" : "Following"}…`}
+          >
+            {rec.followLabel} {rec.target?.author ? `@${rec.target.author}` : ""}
+          </ActionButton>
+          <span className="text-xs text-zinc-500">One click follows them from {rec.account?.handle}.</span>
+        </div>
+      )}
+
+      {canRegenerate && (
+        <form action={regenAction} className="mt-3 flex flex-wrap items-center gap-2">
+          <input type="hidden" name="current" value={text} />
+          <input
+            name="note"
+            placeholder="Optional note, e.g. shorter, mention the demo, less formal"
+            className={`${input} min-w-48 flex-1`}
+          />
+          <button type="submit" disabled={regenerating} className={btn.secondary}>
+            {regenerating ? "Regenerating…" : "Regenerate with Haiku"}
+          </button>
+        </form>
+      )}
+      {regen?.error && (
+        <div className="mt-2">
+          <Notice kind="error">{regen.error}</Notice>
         </div>
       )}
 
@@ -102,7 +160,7 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
             </div>
           )}
           {(needsTitle || rec.draftTitle) && (
-            <input name="title" defaultValue={rec.draftTitle ?? ""} placeholder="Title" className={input} required={needsTitle} />
+            <input name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className={input} required={needsTitle} />
           )}
           <textarea
             name="text"
@@ -125,6 +183,22 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
               </span>
             )}
           </div>
+          {rec.kind === "reply" && (rec.likeable || rec.followable) && (
+            <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-300">
+              {rec.likeable && (
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="alsoLike" className="h-4 w-4 accent-emerald-500" /> Also like their post
+                </label>
+              )}
+              {rec.followable && (
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="alsoFollow" className="h-4 w-4 accent-emerald-500" /> Also {rec.followLabel.toLowerCase()}{" "}
+                  {rec.target?.author ? `@${rec.target.author}` : "them"}
+                </label>
+              )}
+              <span className="text-xs text-zinc-500">Done together with the reply, when it posts.</span>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             {rec.suggestedLabel && !rec.suggestedInPast && (
               <SubmitButton name="mode" value="schedule" pendingText="Scheduling…">
@@ -159,13 +233,13 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
       ) : (
         rec.draftText && (
           <div className="mt-3">
-            {rec.draftTitle && <div className="mb-1 text-sm font-medium text-zinc-200">{rec.draftTitle}</div>}
-            <div className="whitespace-pre-wrap rounded-md bg-zinc-950/60 p-3 text-sm text-zinc-300">{rec.draftText}</div>
+            {(title || rec.draftTitle) && <div className="mb-1 text-sm font-medium text-zinc-200">{title || rec.draftTitle}</div>}
+            <div className="whitespace-pre-wrap rounded-md bg-zinc-950/60 p-3 text-sm text-zinc-300">{text || rec.draftText}</div>
             <button
               type="button"
               className={`${btn.ghost} mt-1 text-xs`}
               onClick={async () => {
-                await navigator.clipboard.writeText([rec.draftTitle, rec.draftText].filter(Boolean).join("\n\n"));
+                await navigator.clipboard.writeText([title || rec.draftTitle, text || rec.draftText].filter(Boolean).join("\n\n"));
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               }}
@@ -198,7 +272,7 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
         {open && showDismiss && (
           <ActionForm action={setRecommendationStatus.bind(null, rec.id)} className="flex flex-1 flex-wrap items-center gap-2">
             <input type="hidden" name="status" value="dismissed" />
-            <input name="note" placeholder="Why? (optional — the planner learns from this)" className={`${input} flex-1`} autoFocus />
+            <input name="note" placeholder="Why? (optional, the planner learns from this)" className={`${input} flex-1`} autoFocus />
             <SubmitButton className={btn.secondary} pendingText="…">
               Dismiss
             </SubmitButton>
