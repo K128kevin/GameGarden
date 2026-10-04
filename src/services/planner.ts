@@ -36,6 +36,9 @@ const DEFAULT_COMMUNITIES: Record<string, string[]> = {
   reddit: ["IndieDev", "indiegames", "gamedev", "IndieGaming"],
 };
 
+/** Never show the strategist conversations older than this, whatever a connector returns. */
+export const MAX_DISCOVERED_AGE_DAYS = 14;
+
 function defaultKeywords(game: Game | null): string[] {
   const kw = ["indie game devlog", "#indiedev", "indie game screenshot"];
   if (game) {
@@ -484,11 +487,13 @@ export async function runPlan(planId: string, opts: { slot: string; trigger: "sc
     // 2. Discover relevant conversations on each platform.
     const keywords = plan.focusKeywords.length ? plan.focusKeywords : defaultKeywords(game);
     const discovered = new Map<string, DiscoveredPost[]>();
+    const discoverCutoff = Date.now() - MAX_DISCOVERED_AGE_DAYS * 86_400_000;
     for (const a of accts) {
       const communities = plan.focusCommunities.length ? plan.focusCommunities : (DEFAULT_COMMUNITIES[a.platform] ?? []);
       try {
         const [fresh] = await db.select().from(socialAccounts).where(eq(socialAccounts.id, a.id));
-        discovered.set(a.id, await getConnector(a.platform).discover(accountContext(fresh), { keywords, communities, limit: 15 }));
+        const found = await getConnector(a.platform).discover(accountContext(fresh), { keywords, communities, limit: 15 });
+        discovered.set(a.id, found.filter((d) => d.createdAt.getTime() >= discoverCutoff));
       } catch {
         discovered.set(a.id, []);
       }

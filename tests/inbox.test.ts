@@ -22,7 +22,7 @@ import { createApprovedAction, executeAction } from "@/services/publisher";
 import { DRAFTING_RULES } from "@/services/drafting-rules";
 
 const now = Date.now();
-let inbound: InboundInteraction[] = [
+const inbound: InboundInteraction[] = [
   { externalId: "q1", kind: "reply", authorHandle: "fan", text: "Is there a demo?", onExternalId: "mypost", replyTarget: { id: "q1" }, occurredAt: new Date(now - 3600_000) },
   { externalId: "q2", kind: "comment", authorHandle: "pal", text: "Nice!", replyTarget: { id: "q2" }, occurredAt: new Date(now - 7200_000), alreadyReplied: true },
   { externalId: "q3", kind: "mention", authorHandle: "dev", text: "cc @me", replyTarget: { id: "q3" }, occurredAt: new Date(now - 5000_000) },
