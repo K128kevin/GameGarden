@@ -4,10 +4,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 
+const seenDiscovered: string[][] = [];
 vi.mock("@/services/ai", () => ({
   MODEL: "mock",
-  generatePlanUpdate: vi.fn(async (ctx: { accounts: { ref: string; discoveredConversations: { ref: string; canFollow?: boolean }[] }[] }) => {
+  generatePlanUpdate: vi.fn(async (ctx: { accounts: { ref: string; discoveredConversations: { ref: string; author: string; canFollow?: boolean }[] }[] }) => {
     const a = ctx.accounts[0];
+    seenDiscovered.push(a.discoveredConversations.map((d) => d.author));
     const d1 = a.discoveredConversations[0];
     return {
       model: "mock",
@@ -72,6 +74,7 @@ const fake: PlatformConnector = {
   ],
   discover: async () => [
     { externalId: "p1", authorHandle: "dev.test", authorId: "did:dev", text: "My lighting system", createdAt: new Date(), metrics: {}, replyTarget: { id: "p1" } },
+    { externalId: "old1", authorHandle: "stale.test", authorId: "did:stale", text: "From last year", createdAt: new Date(Date.now() - 400 * 86_400_000), metrics: {}, replyTarget: { id: "old1" } },
   ],
   resolveOwnContentUrl: async () => null,
   matchesUrl: () => false,
@@ -115,6 +118,7 @@ describe("follow suggestions", () => {
     expect(follow.target?.author).toBe("dev.test");
     expect(recs.find((x) => x.title === "Follow someone made up")!.kind).toBe("engage"); // invented ref → manual task
     expect(follows).toHaveLength(0); // nothing followed without a click
+    expect(seenDiscovered.at(-1)).toEqual(["dev.test"]); // year-old discovered post never reaches the strategist
   });
 
   it("follows the referenced author (what the Follow button calls)", async () => {

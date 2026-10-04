@@ -70,7 +70,7 @@ ${DRAFTING_RULES}
 - Don't repeat recommendations the user dismissed unless something has changed; learn from their notes. If a previously pending recommendation (R#) is still a good idea, re-issue it (possibly improved); if the data shows the user already did it manually, list it in completedRefs.
 - suggestedTime must be in the future (at least 15 minutes after "now"), chosen for when the audience is most active (use the timing learnings in the strategy and observed engagement). Spread posts out; don't stack multiple original posts on one account within a few hours.
 - Everything you suggest will be reviewed by the user; nothing is posted without their explicit approval, so make drafts ready to use as-is.
-- focusKeywords should be specific search phrases that surface conversations where this user can genuinely contribute (genre, mechanics, art style, devlog topics, "screenshot saturday"-style community events), not generic terms.`;
+- focusKeywords should be specific search phrases that surface conversations where this user can genuinely contribute (genre, mechanics, art style, devlog topics, "screenshot saturday"-style community events), not generic terms. Keep each one short (one to three words or a single hashtag such as "#pixelart"): Bluesky search matches every word, so long phrases find almost nothing. Discovered conversations are all from the last few days.`;
 
 export async function generatePlanUpdate(context: unknown): Promise<{
   output: PlanOutputT;

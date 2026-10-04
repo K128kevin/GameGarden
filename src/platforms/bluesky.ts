@@ -14,6 +14,11 @@ type BskyCreds = { service: string; identifier: string; appPassword: string };
 
 const DEFAULT_SERVICE = "https://bsky.social";
 
+/** Discovery only looks at posts from the last few days: older ones are poor places to join in. */
+export const DISCOVER_DAYS = 3;
+/** Busy indie dev hashtags used to fill discovery when the plan's own queries come back thin. */
+const FALLBACK_QUERIES = ["#indiedev", "#gamedev", "#screenshotsaturday"];
+
 // One login per account context (a sync makes several calls; createSession is rate-limited).
 const agents = new WeakMap<AccountContext, Promise<AtpAgent>>();
 
@@ -193,23 +198,33 @@ export const bluesky: PlatformConnector = {
 
   async discover(ctx, { keywords, limit }) {
     const agent = await agentFor(ctx);
+    const sinceMs = Date.now() - DISCOVER_DAYS * 86_400_000;
+    const since = new Date(sinceMs).toISOString();
     const out: DiscoveredPost[] = [];
     const seen = new Set<string>();
-    const queries = keywords.slice(0, 4);
-    const per = Math.max(5, Math.ceil(limit / Math.max(queries.length, 1)));
-    for (const q of queries) {
+
+    const search = async (q: string, sort: "top" | "latest", want: number) => {
+      if (want <= 0) return;
       try {
-        const { data } = await agent.app.bsky.feed.searchPosts({ q, limit: per, sort: "top" });
+        // Ask for extra: replies, our own posts and backdated posts get filtered out below.
+        const { data } = await agent.app.bsky.feed.searchPosts({ q, sort, since, limit: Math.min(want * 3, 50) });
+        let added = 0;
         for (const p of data.posts) {
+          if (added >= want) break;
           if (seen.has(p.uri) || p.author.did === ctx.account.externalId) continue;
+          const record = p.record as { createdAt?: string; reply?: unknown };
+          if (record.reply) continue; // top-level conversations make better targets than mid-thread replies
+          const createdAt = new Date(record.createdAt ?? p.indexedAt);
+          if (!(createdAt.getTime() >= sinceMs)) continue; // `since` filters on index time; createdAt can be backdated
           seen.add(p.uri);
+          added++;
           out.push({
             externalId: p.uri,
             url: bskyPostUrl(p.author.handle, p.uri),
             authorHandle: p.author.handle,
             authorId: p.author.did,
             text: truncate(postText(p.record), 500),
-            createdAt: new Date((p.record as { createdAt?: string }).createdAt ?? p.indexedAt),
+            createdAt,
             metrics: { likes: p.likeCount ?? 0, reposts: p.repostCount ?? 0, replies: p.replyCount ?? 0 },
             replyTarget: replyTargetFor(p.uri, p.cid, p.record),
             matchedQuery: q,
@@ -218,6 +233,20 @@ export const bluesky: PlatformConnector = {
       } catch {
         // Search is best-effort; skip failing queries.
       }
+    };
+
+    // Per query: the most-engaged posts of the last few days, plus the newest ones (still open conversations).
+    const queries = keywords.slice(0, 4);
+    const per = Math.max(4, Math.ceil(limit / Math.max(queries.length, 1)));
+    for (const q of queries) {
+      await search(q, "top", Math.ceil(per / 2));
+      await search(q, "latest", Math.floor(per / 2));
+    }
+    // Specific phrases often match little on Bluesky; top up from the always-busy dev hashtags.
+    const used = new Set(queries.map((q) => q.toLowerCase()));
+    for (const q of FALLBACK_QUERIES) {
+      if (out.length >= limit) break;
+      if (!used.has(q)) await search(q, "top", limit - out.length);
     }
     return out.slice(0, limit);
   },
