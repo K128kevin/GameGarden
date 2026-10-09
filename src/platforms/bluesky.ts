@@ -196,6 +196,28 @@ export const bluesky: PlatformConnector = {
     return out;
   },
 
+  async findReplied(ctx, externalIds) {
+    const agent = await agentFor(ctx);
+    const me = ctx.account.externalId;
+    const replied: string[] = [];
+    const queue = [...externalIds];
+    const worker = async () => {
+      for (let uri = queue.shift(); uri; uri = queue.shift()) {
+        try {
+          const { data } = await agent.getPostThread({ uri, depth: 1, parentHeight: 0 });
+          const t = data.thread;
+          if (AppBskyFeedDefs.isThreadViewPost(t) && t.replies?.some((r) => AppBskyFeedDefs.isThreadViewPost(r) && r.post.author.did === me)) {
+            replied.push(uri);
+          }
+        } catch {
+          // Deleted or blocked posts can't be checked; leave them as they are.
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(5, queue.length) }, worker));
+    return replied;
+  },
+
   async discover(ctx, { keywords, limit }) {
     const agent = await agentFor(ctx);
     const sinceMs = Date.now() - DISCOVER_DAYS * 86_400_000;

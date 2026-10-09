@@ -153,6 +153,12 @@ export interface PlatformConnector {
   /** Does this URL belong to this platform? */
   matchesUrl(url: string): boolean;
   publish(ctx: AccountContext, payload: PublishPayload): Promise<PublishResult>;
+  /**
+   * Of these inbound messages (interaction external ids), return the ones the account has already
+   * replied to directly on the platform. Catches replies made outside GameGarden that the own-content
+   * sync missed. Best-effort: return what could be checked.
+   */
+  findReplied?(ctx: AccountContext, externalIds: string[]): Promise<string[]>;
   /** Like/upvote the post or comment described by a reply target (capabilities.like). */
   like?(ctx: AccountContext, target: RecommendationTarget): Promise<{ already?: boolean }>;
   /** Follow/subscribe to a user by platform id and/or handle (capabilities.follow). */
