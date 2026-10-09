@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   accountSnapshots,
@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { decryptJson, encryptJson } from "@/lib/crypto";
 import { getConnector } from "@/platforms/registry";
+import { INBOX_WINDOW_DAYS, REPLYABLE_KINDS } from "./inbox";
 import {
   PlatformError,
   type AccountContext,
@@ -122,7 +123,7 @@ export async function syncAccount(acct: SocialAccount): Promise<SyncResult> {
       .select({ c: sql<number>`count(*)::int` })
       .from(contentItems)
       .where(eq(contentItems.accountId, acct.id));
-    const own = await connector.fetchOwnContent(ctx, { limit: 50 });
+    const own = await connector.fetchOwnContent(ctx, { limit: OWN_CONTENT_CHECK_LIMIT });
     await upsertOwnContent(acct.id, own);
     const after = await db
       .select({ c: sql<number>`count(*)::int` })
@@ -130,6 +131,7 @@ export async function syncAccount(acct: SocialAccount): Promise<SyncResult> {
       .where(eq(contentItems.accountId, acct.id));
 
     const newInteractions = await upsertInteractions(acct.id, await connector.fetchInteractions(ctx, { limit: 50 }));
+    await markAnsweredInteractions(acct);
 
     await db
       .update(socialAccounts)
@@ -187,6 +189,60 @@ async function upsertInteractions(accountId: string, inbound: InboundInteraction
   return inserted.length;
 }
 
+/** How many of your own recent posts/replies each sync reads (one request on every platform). */
+const OWN_CONTENT_CHECK_LIMIT = 100;
+/** Most open messages to ask the platform about per check (newest first). */
+const REPLIED_CHECK_LIMIT = 50;
+
+/**
+ * Mark messages you've already answered as "replied" so they leave the Inbox for good:
+ * first from your own synced replies, then by asking the platform about the rest
+ * (catches replies made outside GameGarden that fell out of the own-content window).
+ */
+export async function markAnsweredInteractions(acct: SocialAccount): Promise<number> {
+  const open = and(eq(interactions.accountId, acct.id), inArray(interactions.status, ["open", "scheduled"]));
+  const fromOwn = await db
+    .update(interactions)
+    .set({ status: "replied" })
+    .where(
+      and(
+        open,
+        sql`exists (select 1 from ${contentItems} ci where ci.account_id = ${interactions.accountId} and ci.parent_external_id = ${interactions.externalId})`,
+      ),
+    )
+    .returning({ id: interactions.id });
+
+  const connector = getConnector(acct.platform);
+  if (!connector.findReplied) return fromOwn.length;
+  const candidates = await db
+    .select({ externalId: interactions.externalId })
+    .from(interactions)
+    .where(
+      and(
+        open,
+        inArray(interactions.kind, [...REPLYABLE_KINDS]),
+        isNotNull(interactions.replyTarget),
+        gt(interactions.occurredAt, sql`now() - make_interval(days => ${INBOX_WINDOW_DAYS})`),
+      ),
+    )
+    .orderBy(desc(interactions.occurredAt))
+    .limit(REPLIED_CHECK_LIMIT);
+  if (!candidates.length) return fromOwn.length;
+  let answered: string[] = [];
+  try {
+    answered = await connector.findReplied(accountContext(acct), candidates.map((c) => c.externalId));
+  } catch {
+    // Best-effort: the own-content check above still applies.
+  }
+  if (!answered.length) return fromOwn.length;
+  const fromPlatform = await db
+    .update(interactions)
+    .set({ status: "replied" })
+    .where(and(open, inArray(interactions.externalId, answered)))
+    .returning({ id: interactions.id });
+  return fromOwn.length + fromPlatform.length;
+}
+
 /**
  * Light check between planning runs: new replies/mentions/comments plus your own
  * recent posts (to detect what you've already answered). No model call.
@@ -195,8 +251,9 @@ export async function syncInbound(acct: SocialAccount): Promise<{ ok: boolean; n
   const connector = getConnector(acct.platform);
   const ctx = accountContext(acct);
   try {
-    await upsertOwnContent(acct.id, await connector.fetchOwnContent(ctx, { limit: 25 }));
+    await upsertOwnContent(acct.id, await connector.fetchOwnContent(ctx, { limit: OWN_CONTENT_CHECK_LIMIT }));
     const newInteractions = await upsertInteractions(acct.id, await connector.fetchInteractions(ctx, { limit: 50 }));
+    await markAnsweredInteractions(acct);
     await db
       .update(socialAccounts)
       .set({ inboundCheckedAt: new Date(), status: "active", statusMessage: null })
