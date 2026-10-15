@@ -14,7 +14,7 @@ Budget about an hour. Most of it is clicking through the Google Cloud console. D
 | Database | **Neon free tier**, region **AWS us-east-1** | Serverless Postgres with a pooled URL; us-east-1 is next to Vercel's default function region (`iad1`), which keeps queries fast. |
 | App URL | `https://<project>.vercel.app` to start | Stable and free. A custom domain can come later (see §10). |
 | Production branch | **`main`** | Keep production separate from the `claude/...` work branch. |
-| Scheduler | Vercel Cron (built in) **+ cron-job.org every 5 min** | Vercel Hobby cron runs each job only once a day. The pinger makes scheduled posts go out within about 5 minutes of their time. |
+| Scheduler | Vercel Cron (built in) **+ cron-job.org every 30 min** | Vercel Hobby cron runs each job only once a day. The pinger publishes scheduled posts at :00 and :30. Pinging more often keeps Neon awake 24/7 and burns the free compute hours. |
 | AI model | Default **`claude-opus-5-5`** (Claude Opus 5.5), with a spending limit set in the Anthropic console | Best-quality strategy. Set `ANTHROPIC_MODEL=claude-sonnet-5` later if cost matters more (§9). |
 | Access | `ALLOWED_EMAILS=<your Gmail>` | Keeps the instance personal until you're ready to open it up. |
 
@@ -184,20 +184,33 @@ Until then, leave the Reddit variables unset. The Accounts page will show Reddit
 
 Vercel Hobby cron runs each job **once a day, at some point within the scheduled hour**. That's enough to trigger the planning runs, but a post you schedule for 3:15 PM would otherwise wait until the next tick. Add one of these; the first is recommended.
 
-### 7a. cron-job.org (recommended; free, every 5 minutes)
+### 7a. cron-job.org (recommended; free, every 30 minutes)
 
 1. Sign up at <https://cron-job.org> → **Create cronjob**.
 2. **URL**: `APP_URL/api/cron/tick`
-3. **Schedule**: every **5 minutes**.
+3. **Schedule**: every **30 minutes**, at minutes **0 and 30** (custom schedule). Planner-suggested times land on :00 or :30, so they go out exactly on time; a time you type yourself goes out at the next :00 or :30. Don't go below 30 minutes (see "Neon compute hours" below).
 4. **Advanced → Headers**: add `Authorization` with the value `Bearer <CRON_SECRET>`.
 5. **Notifications**: enable "notify me when the job fails" (e.g. after 3 consecutive failures).
 6. Click **Test run**. You should get HTTP 200 with JSON like `{"slot":"2026-09-28-am","published":[],"planning":"checking in background",...}`.
 
 The endpoint answers in well under a second and does any planning in the background, so cron-job.org's 30-second timeout isn't a problem.
 
+### Neon compute hours (free plan)
+
+Neon's free plan includes 100 compute hours a month. The database uses them only while it's awake, and it goes to sleep after 5 minutes with no queries. Every heartbeat, page view and plan run wakes it for at least those 5 minutes. Rough monthly usage at the smallest (0.25 CU) size:
+
+| Pinger interval | Database awake | Compute hours / month |
+| --- | --- | --- |
+| every 5 min | all the time | ~180 (runs out in ~17 days) |
+| every 15 min | ~1/3 of the time | ~60, plus your own use |
+| **every 30 min** | ~1/6 of the time | **~30–35, plus your own use** |
+| every 60 min | ~1/12 of the time | ~15–20, plus your own use |
+
+Also check in the Neon console (**Branches → production → Computes → Edit**) that the compute size is a fixed **0.25 CU**; autoscaling above that multiplies the hours, and this app doesn't need more. You can watch usage on Neon's **Billing / Usage** page.
+
 ### 7b. GitHub Actions (alternative, free on a public repo)
 
-`.github/workflows/tick.yml` pings every 15 minutes. GitHub may delay scheduled runs, and it pauses schedules after 60 days without repo activity. To enable it, go to repo **Settings → Secrets and variables → Actions**:
+`.github/workflows/tick.yml` pings every 30 minutes. GitHub may delay scheduled runs, and it pauses schedules after 60 days without repo activity. To enable it, go to repo **Settings → Secrets and variables → Actions**:
 
 - **Secrets**: `CRON_SECRET`
 - **Variables**: `APP_URL` = your URL, `ENABLE_TICK` = `true`
@@ -220,7 +233,7 @@ Work through these in order. Each one tests a different part of the system.
 4. **Connect Bluesky.** On bsky.app go to **Settings → Privacy and security → App passwords → Add** and name it `GameGarden`. Leave "Allow access to your direct messages" **unchecked**. In GameGarden, open **Accounts → Connect Bluesky** and enter your handle and the app password. You should see your follower count and recent posts.
 5. **Connect YouTube.** Open **Accounts → Connect YouTube** and choose the Google account or Brand Account that owns the channel. The "unverified app" screen is expected (§5a).
 6. **Add your game.** Under **Games → Add a game**, fill in the pitch, description, genres, and Steam and/or itch.io URLs. These are what the strategist works from, so be specific about the audience and comparable games. Then tick the **Linked accounts** and save.
-7. **Test publishing safely.** Under **Compose**, pick Bluesky, write a harmless post, set a time about 10 minutes out, and click **Schedule**. Check **Schedule**: it should flip to *published* within about 5 minutes of that time (it depends on the pinger). If you'd rather not post publicly, click **Cancel** before it's due; that tests the cancel path instead.
+7. **Test publishing safely.** Under **Compose**, pick Bluesky, write a harmless post, set a time about 10 minutes out, and click **Schedule**. Check **Schedule**: it should flip to *published* at the next :00 or :30 after that time (it depends on the pinger). If you'd rather not post publicly, click **Cancel** before it's due; that tests the cancel path instead.
 8. **First plan.** On your Bluesky account page, open **Growth recommendations**, tick opt-in, and write concrete goals, for example:
 
    > "Reach 1,000 followers before our Steam Next Fest demo in February. I'm a solo dev making a cozy pixel-art roguelite; I can post about once a day and reply in the evenings."

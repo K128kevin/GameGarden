@@ -29,6 +29,7 @@ import { accountContext, syncAccount } from "./accounts";
 import { generatePlanUpdate, type PlanOutputT } from "./ai";
 import { repliesInFlight } from "./inbox";
 import { foldPendingFollows } from "./follow-merge";
+import { HEARTBEAT_MINUTES } from "./heartbeat";
 import { refreshStoreData } from "./games";
 
 type RefTarget = { accountId: string; target: RecommendationTarget };
@@ -355,7 +356,9 @@ function clampTime(iso: string): Date {
   let t = new Date(iso).getTime();
   if (Number.isNaN(t) || t < now + 10 * 60_000) t = now + 30 * 60_000;
   if (t > now + 7 * 86_400_000) t = now + 7 * 86_400_000;
-  return new Date(Math.round(t / 60_000) * 60_000);
+  // Round up to the next :00 or :30, when the heartbeat publishes, so suggested times are exact.
+  const grid = HEARTBEAT_MINUTES * 60_000;
+  return new Date(Math.ceil(t / grid) * grid);
 }
 
 async function persistOutput(

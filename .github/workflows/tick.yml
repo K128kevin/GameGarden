@@ -1,4 +1,6 @@
-# Optional heartbeat so scheduled posts publish within ~15 minutes of their time.
+# Optional heartbeat so scheduled posts publish within ~30 minutes of their time (on time
+# if scheduled for :00 or :30). Don't ping more often: each call wakes the Neon database,
+# and pinging every few minutes keeps it awake 24/7 and uses up the free compute hours.
 # Vercel's free (Hobby) cron can only run once per day per job, which covers the
 # 9 AM / 9 PM ET planning runs but not arbitrary scheduled posts.
 #
@@ -6,13 +8,13 @@
 #   secrets:   CRON_SECRET (same value as the app's env var)
 #   variables: APP_URL (e.g. https://gamegarden.vercel.app), ENABLE_TICK=true
 #
-# Note: on private repos each run bills 1 Actions minute (~2,900/month at */15),
-# which exceeds the 2,000 free minutes. For private repos prefer a free external
+# Note: on private repos each run bills 1 Actions minute (~1,450/month at every 30 min),
+# most of the 2,000 free minutes. For private repos prefer a free external
 # pinger such as cron-job.org (see README), or raise the interval.
 name: tick
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0,30 * * * *"
   workflow_dispatch: {}
 jobs:
   tick:

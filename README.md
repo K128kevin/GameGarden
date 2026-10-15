@@ -36,9 +36,9 @@ There is one idempotent heartbeat endpoint, `GET /api/cron/tick` (it needs `Auth
 
 `vercel.json` calls the tick at 13:00, 14:00, 01:00 and 02:00 UTC. That covers 9 AM and 9 PM Eastern in both EDT and EST, and it fits Vercel Hobby's limit of one run per day per cron job. Calls outside a slot do nothing.
 
-Scheduled posts go out on the next tick after their time. On Vercel Hobby the only built-in ticks are the four above, so to publish on time, add a free pinger that calls the tick every 5–15 minutes:
+Scheduled posts go out on the next tick after their time. On Vercel Hobby the only built-in ticks are the four above, so to publish on time, add a free pinger that calls the tick **every 30 minutes, on the hour and half hour**. Planner-suggested times land on :00 or :30, so they still go out on time. Don't ping more often: every call wakes the Neon database, and since Neon only sleeps after 5 idle minutes, a 5-minute pinger keeps it awake around the clock and uses up the free plan's compute hours in about 17 days.
 
-- **cron-job.org** (recommended, free): create a job for `https://YOUR-APP/api/cron/tick` every 5 minutes with the header `Authorization: Bearer YOUR_CRON_SECRET`.
+- **cron-job.org** (recommended, free): create a job for `https://YOUR-APP/api/cron/tick` every 30 minutes (minutes `0,30`) with the header `Authorization: Bearer YOUR_CRON_SECRET`.
 - **GitHub Actions**: `.github/workflows/tick.yml` is included. It's free on public repos and disabled until you set the repo variable `ENABLE_TICK=true`, the variable `APP_URL`, and the secret `CRON_SECRET`.
 
 The tick publishes due posts and then responds right away; planning runs continue in the background (`after()`), so pingers with short timeouts work fine.
@@ -62,7 +62,7 @@ Short version:
 2. Create a Google OAuth web client with redirect URIs `APP_URL/api/auth/callback/google` and `APP_URL/api/connect/youtube/callback`. Enable YouTube Data API v3, and **publish** the consent screen so tokens don't expire after 7 days.
 3. Create a Claude API key and set a spend limit.
 4. Import the repo into Vercel, set the build command to `npm run vercel-build`, and add the variables from `.env.example`.
-5. Point cron-job.org at `APP_URL/api/cron/tick` every 5 minutes with `Authorization: Bearer $CRON_SECRET`.
+5. Point cron-job.org at `APP_URL/api/cron/tick` every 30 minutes (minutes 0 and 30) with `Authorization: Bearer $CRON_SECRET`.
 
 **Cost:** each plan run is one Claude call, typically 15–30k input tokens and 4–8k output tokens. With the default `claude-opus-5-5` ($4 / $20 per million input/output tokens) that is roughly $0.20–0.35 per run, so about $12–20 a month per active plan at two runs a day. Set `ANTHROPIC_MODEL=claude-sonnet-5` to cut that roughly in half again. Requests enable Anthropic's server-side refusal fallback (`fallbacks: "default"`). Inbox reply drafts are separate and only run when you click: roughly $0.003 with Haiku 4.5, $0.01 with Sonnet 5.5, and $0.04 with Opus 5.5 per draft.
 

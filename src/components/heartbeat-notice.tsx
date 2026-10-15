@@ -38,7 +38,7 @@ export async function HeartbeatNotice({ overdueCount }: { overdueCount: number }
           ? `The frequent heartbeat last ran ${formatRelative(hb.lastExternal)}.`
           : "No frequent heartbeat has ever reached the app."}{" "}
         Vercel&apos;s free cron only runs around 9 AM and 9 PM ET, so set up cron-job.org to call{" "}
-        <code>/api/cron/tick</code> every 5 minutes (see docs/DEPLOYMENT.md, step 7). Until then, due posts go out when you
+        <code>/api/cron/tick</code> every 30 minutes, on the hour and half hour (see docs/DEPLOYMENT.md, step 7). Until then, due posts go out when you
         open GameGarden, or you can click <strong>Post now</strong>.
         {overdueCount > 0 && ` ${overdueCount} scheduled item${overdueCount === 1 ? " is" : "s are"} overdue.`}
       </Notice>
