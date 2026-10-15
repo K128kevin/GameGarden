@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { activityLog, gameAccounts, games, planRuns, plans, recommendations, socialAccounts } from "@/db/schema";
 import { clearPlanHistoryAction, runPlanNow, updatePlanSettings } from "@/app/actions";
 import { getUserSettings, requireUser } from "@/lib/session";
+import { foldPendingFollows } from "@/services/follow-merge";
 import { isPlanUpdated, planTitle } from "@/lib/plan-names";
 import { formatDateTime, formatRelative, nextPlanSlot, slotLabelFromId } from "@/lib/time";
 import { toRecView } from "@/lib/views";
@@ -17,6 +18,7 @@ export const maxDuration = 300;
 export default async function PlanPage({ params }: PageProps<"/plans/[id]">) {
   const { id } = await params;
   const user = await requireUser();
+  await foldPendingFollows(user.id); // also merges suggestions made before follow folding existed
   const [plan] = await db.select().from(plans).where(and(eq(plans.id, id), eq(plans.userId, user.id)));
   if (!plan) notFound();
   const { timezone: tz } = await getUserSettings(user.id);

@@ -74,7 +74,7 @@ export type InboxEntry = {
   /** The user's own post/comment this is a reply to, if we have it. */
   onPost: { text: string; title: string | null; url: string | null } | null;
   /** A pending plan recommendation that already drafted a reply to this item. */
-  planRec: { id: string; draftText: string | null; title: string } | null;
+  planRec: { id: string; draftText: string | null; title: string; suggestFollow: boolean } | null;
 };
 
 export async function listInbox(userId: string, limit = 50): Promise<InboxEntry[]> {
@@ -95,7 +95,14 @@ export async function listInbox(userId: string, limit = 50): Promise<InboxEntry[
         .where(and(inArray(contentItems.externalId, parentIds), inArray(contentItems.accountId, [...new Set(rows.map((r) => r.account.id))])))
     : [];
   const pending = await db
-    .select({ id: recommendations.id, draftText: recommendations.draftText, title: recommendations.title, target: recommendations.target, accountId: recommendations.accountId })
+    .select({
+      id: recommendations.id,
+      draftText: recommendations.draftText,
+      title: recommendations.title,
+      target: recommendations.target,
+      accountId: recommendations.accountId,
+      suggestFollow: recommendations.suggestFollow,
+    })
     .from(recommendations)
     .where(and(eq(recommendations.userId, userId), eq(recommendations.status, "pending"), eq(recommendations.kind, "reply")));
 
@@ -106,7 +113,7 @@ export async function listInbox(userId: string, limit = 50): Promise<InboxEntry[
       interaction,
       account,
       onPost: parent ? { text: parent.text, title: parent.title, url: parent.url } : null,
-      planRec: rec ? { id: rec.id, draftText: rec.draftText, title: rec.title } : null,
+      planRec: rec ? { id: rec.id, draftText: rec.draftText, title: rec.title, suggestFollow: rec.suggestFollow } : null,
     };
   });
 }

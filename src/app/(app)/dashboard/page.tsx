@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { activityLog, games, planRuns, plans, recommendations, scheduledActions, socialAccounts } from "@/db/schema";
 import { getUserSettings, requireUser } from "@/lib/session";
+import { foldPendingFollows } from "@/services/follow-merge";
 import { formatDateTime, formatRelative, msFromNow, nextPlanSlot, slotLabelFromId } from "@/lib/time";
 import { toRecView } from "@/lib/views";
 import { listInbox } from "@/services/inbox";
@@ -13,6 +14,7 @@ export const maxDuration = 300;
 
 export default async function Dashboard() {
   const user = await requireUser();
+  await foldPendingFollows(user.id); // also merges suggestions made before follow folding existed
   const { timezone: tz } = await getUserSettings(user.id);
 
   const [accts, gameRows, planRows, pendingRecs, upcoming, activity] = await Promise.all([
