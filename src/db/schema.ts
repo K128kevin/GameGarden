@@ -345,6 +345,8 @@ export const recommendations = pgTable(
     target: jsonb("target").$type<RecommendationTarget | null>(),
     suggestedFor: timestamp("suggested_for", { withTimezone: true }),
     priority: text("priority").notNull().default("medium"),
+    /** For replies: the planner also recommends following this person (pre-checks "Also follow"). */
+    suggestFollow: boolean("suggest_follow").notNull().default(false),
     /** pending | scheduled | posted | done | dismissed | expired | failed */
     status: text("status").notNull().default("pending"),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),

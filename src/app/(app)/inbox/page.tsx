@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { socialAccounts } from "@/db/schema";
 import { checkInboxNow } from "@/app/actions";
 import { getUserSettings, requireUser } from "@/lib/session";
+import { foldPendingFollows } from "@/services/follow-merge";
 import { formatDateTime, formatRelative, msFromNow, toLocalInput } from "@/lib/time";
 import { replyModelLabel } from "@/lib/reply-models";
 import { getConnector } from "@/platforms/registry";
@@ -17,6 +18,7 @@ export const maxDuration = 60;
 
 export default async function InboxPage() {
   const user = await requireUser();
+  await foldPendingFollows(user.id); // also merges suggestions made before follow folding existed
   const { timezone: tz } = await getUserSettings(user.id);
   const entries = await listInbox(user.id);
   const [acctInfo] = await db
@@ -85,6 +87,7 @@ export default async function InboxPage() {
                     authorId: e.interaction.authorId,
                   }),
                   followLabel: followLabel(e.account.platform),
+                  suggestFollow: e.planRec?.suggestFollow ?? false,
                 }}
               />
             );

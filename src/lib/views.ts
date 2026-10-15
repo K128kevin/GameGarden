@@ -38,5 +38,6 @@ export function toRecView(
     likeable: Boolean(acct && r.kind === "reply" && canLike(acct.platform, r.target)),
     followable: Boolean(acct && (r.kind === "reply" || r.kind === "follow") && canFollow(acct.platform, r.target)),
     followLabel: acct ? followLabel(acct.platform) : "Follow",
+    suggestFollow: r.suggestFollow,
   };
 }

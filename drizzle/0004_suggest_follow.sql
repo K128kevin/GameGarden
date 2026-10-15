@@ -1,0 +1,1 @@
+ALTER TABLE "recommendations" ADD COLUMN "suggest_follow" boolean DEFAULT false NOT NULL;

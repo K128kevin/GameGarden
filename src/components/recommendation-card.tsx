@@ -35,6 +35,8 @@ export type RecView = {
   /** The target's author can be followed from GameGarden. */
   followable: boolean;
   followLabel: string;
+  /** The planner also recommends following the person this replies to. */
+  suggestFollow: boolean;
 };
 
 const kindLabel: Record<string, string> = {
@@ -192,8 +194,9 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
               )}
               {rec.followable && (
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" name="alsoFollow" className="h-4 w-4 accent-emerald-500" /> Also {rec.followLabel.toLowerCase()}{" "}
-                  {rec.target?.author ? `@${rec.target.author}` : "them"}
+                  <input type="checkbox" name="alsoFollow" defaultChecked={rec.suggestFollow} className="h-4 w-4 accent-emerald-500" /> Also{" "}
+                  {rec.followLabel.toLowerCase()} {rec.target?.author ? `@${rec.target.author}` : "them"}
+                  {rec.suggestFollow && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300">Recommended</span>}
                 </label>
               )}
               <span className="text-xs text-zinc-500">Done together with the reply, when it posts.</span>

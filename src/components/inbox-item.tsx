@@ -23,6 +23,8 @@ export type InboxItemView = {
   likeable: boolean;
   followable: boolean;
   followLabel: string;
+  /** The growth plan also recommends following this person. */
+  suggestFollow: boolean;
 };
 
 function ModelPicker({ defaultValue }: { defaultValue: string }) {
@@ -121,8 +123,9 @@ export function InboxItem({ item }: { item: InboxItemView }) {
               )}
               {item.followable && (
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" name="alsoFollow" className="h-4 w-4 accent-emerald-500" /> Also {item.followLabel.toLowerCase()}{" "}
-                  {item.author ?? "them"}
+                  <input type="checkbox" name="alsoFollow" defaultChecked={item.suggestFollow} className="h-4 w-4 accent-emerald-500" /> Also{" "}
+                  {item.followLabel.toLowerCase()} {item.author ?? "them"}
+                  {item.suggestFollow && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300">Recommended</span>}
                 </label>
               )}
               <span className="text-xs text-zinc-500">Done together with the reply, when it posts.</span>

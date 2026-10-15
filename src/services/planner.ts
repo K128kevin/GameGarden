@@ -28,6 +28,7 @@ import { formatDateTime, slotLabelFromId } from "@/lib/time";
 import { accountContext, syncAccount } from "./accounts";
 import { generatePlanUpdate, type PlanOutputT } from "./ai";
 import { repliesInFlight } from "./inbox";
+import { foldPendingFollows } from "./follow-merge";
 import { refreshStoreData } from "./games";
 
 type RefTarget = { accountId: string; target: RecommendationTarget };
@@ -412,10 +413,13 @@ async function persistOutput(
       target,
       suggestedFor: clampTime(r.suggestedTime),
       priority: r.priority,
+      suggestFollow: false,
       status: "pending",
     });
   }
   if (rows.length) await db.insert(recommendations).values(rows);
+  // Follows for people we also suggest replying to ride along with that reply.
+  const merged = await foldPendingFollows(plan.userId);
 
   const strategyChanged = output.strategyChanged || !plan.strategy;
   await db
@@ -428,7 +432,7 @@ async function persistOutput(
       lastRunAt: now,
     })
     .where(eq(plans.id, plan.id));
-  return { count: rows.length, strategyChanged };
+  return { count: Math.max(0, rows.length - merged), strategyChanged };
 }
 
 export type RunResult = { status: "succeeded" | "failed" | "skipped"; runId?: string; error?: string };

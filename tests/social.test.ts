@@ -11,6 +11,7 @@ vi.mock("@/services/ai", () => ({
     const a = ctx.accounts[0];
     seenDiscovered.push(a.discoveredConversations.map((d) => d.author));
     const d1 = a.discoveredConversations[0];
+    const d2 = a.discoveredConversations[1];
     return {
       model: "mock",
       inputTokens: 1,
@@ -24,9 +25,10 @@ vi.mock("@/services/ai", () => ({
         focusCommunities: [],
         completedRefs: [],
         recommendations: [
-          { kind: "follow", accountRef: a.ref, title: "Follow a fellow dev", rationale: "", draftText: "", draftTitle: "", community: "", link: "", targetRef: d1.canFollow ? d1.ref : "", suggestedTime: "", priority: "medium" },
+          { kind: "follow", accountRef: a.ref, title: "Follow a fellow dev", rationale: "Posts great lighting breakdowns", draftText: "", draftTitle: "", community: "", link: "", targetRef: d1.canFollow ? d1.ref : "", suggestedTime: "", priority: "medium" },
+          { kind: "follow", accountRef: a.ref, title: "Follow an artist", rationale: "", draftText: "", draftTitle: "", community: "", link: "", targetRef: d2?.canFollow ? d2.ref : "", suggestedTime: "", priority: "medium" },
           { kind: "follow", accountRef: a.ref, title: "Follow someone made up", rationale: "", draftText: "", draftTitle: "", community: "", link: "", targetRef: "D99", suggestedTime: "", priority: "low" },
-          { kind: "reply", accountRef: a.ref, title: "Reply to the dev", rationale: "", draftText: "Love the lighting — how did you do it?", draftTitle: "", community: "", link: "", targetRef: d1.ref, suggestedTime: "", priority: "high" },
+          { kind: "reply", accountRef: a.ref, title: "Reply to the dev", rationale: "Good question to answer", draftText: "Love the lighting — how did you do it?", draftTitle: "", community: "", link: "", targetRef: d1.ref, suggestedTime: "", priority: "high" },
         ],
       },
     };
@@ -44,13 +46,14 @@ vi.mock("@/services/llm", () => ({
 }));
 
 import { db } from "@/db";
-import { interactions, plans, recommendations, scheduledActions, socialAccounts, user } from "@/db/schema";
+import { games, interactions, plans, recommendations, scheduledActions, socialAccounts, user } from "@/db/schema";
 import { connectors } from "@/platforms/registry";
 import type { PlatformConnector } from "@/platforms/types";
 import { syncInbound, upsertConnectedAccount } from "@/services/accounts";
 import { runPlan } from "@/services/planner";
 import { createApprovedAction, executeAction } from "@/services/publisher";
 import { regenerateRecommendationDraft } from "@/services/regenerate";
+import { foldPendingFollows, planFollowMerges } from "@/services/follow-merge";
 import { canFollow, canLike, followAuthor } from "@/services/social-actions";
 
 const likes: unknown[] = [];
@@ -74,6 +77,7 @@ const fake: PlatformConnector = {
   ],
   discover: async () => [
     { externalId: "p1", authorHandle: "dev.test", authorId: "did:dev", text: "My lighting system", createdAt: new Date(), metrics: {}, replyTarget: { id: "p1" } },
+    { externalId: "p3", authorHandle: "artist.test", authorId: "did:artist", text: "New tileset", createdAt: new Date(), metrics: {}, replyTarget: { id: "p3" } },
     { externalId: "old1", authorHandle: "stale.test", authorId: "did:stale", text: "From last year", createdAt: new Date(Date.now() - 400 * 86_400_000), metrics: {}, replyTarget: { id: "old1" } },
   ],
   resolveOwnContentUrl: async () => null,
@@ -112,13 +116,23 @@ describe("follow suggestions", () => {
     const r = await runPlan(planId, { slot: "manual-social", trigger: "manual" });
     expect(r.status).toBe("succeeded");
     const recs = await db.select().from(recommendations).where(eq(recommendations.planId, planId));
-    const follow = recs.find((x) => x.title === "Follow a fellow dev")!;
-    expect(follow.kind).toBe("follow");
-    expect(follow.target?.authorId).toBe("did:dev");
-    expect(follow.target?.author).toBe("dev.test");
+    const follow = recs.find((x) => x.title === "Follow an artist")!;
+    expect(follow.kind).toBe("follow"); // nobody to reply to → stays a separate item
+    expect(follow.target?.authorId).toBe("did:artist");
+    expect(follow.target?.author).toBe("artist.test");
     expect(recs.find((x) => x.title === "Follow someone made up")!.kind).toBe("engage"); // invented ref → manual task
     expect(follows).toHaveLength(0); // nothing followed without a click
-    expect(seenDiscovered.at(-1)).toEqual(["dev.test"]); // year-old discovered post never reaches the strategist
+    expect(seenDiscovered.at(-1)).toEqual(["dev.test", "artist.test"]); // year-old discovered post never reaches the strategist
+  });
+
+  it("folds a follow into a reply to the same person (pre-checked 'Also follow')", async () => {
+    const recs = await db.select().from(recommendations).where(eq(recommendations.planId, planId));
+    expect(recs.find((x) => x.title === "Follow a fellow dev")).toBeUndefined(); // no separate item
+    const reply = recs.find((x) => x.title === "Reply to the dev")!;
+    expect(reply.suggestFollow).toBe(true);
+    expect(reply.target?.authorId).toBe("did:dev");
+    expect(reply.rationale).toBe("Good question to answer Also worth following: Posts great lighting breakdowns");
+    expect(recs.find((x) => x.title === "Follow an artist")!.suggestFollow).toBe(false);
   });
 
   it("follows the referenced author (what the Follow button calls)", async () => {
@@ -126,7 +140,7 @@ describe("follow suggestions", () => {
     const [acct] = await db.select().from(socialAccounts).where(eq(socialAccounts.id, accountId));
     expect(canFollow("fakesocial", rec.target)).toBe(true);
     await followAuthor(acct, rec.target!);
-    expect(follows.at(-1)).toEqual({ id: "did:dev", handle: "dev.test" });
+    expect(follows.at(-1)).toEqual({ id: "did:artist", handle: "artist.test" });
   });
 
   it("YouTube-style connectors without handle follow need an author id", () => {
@@ -242,5 +256,58 @@ describe("regenerate a suggested draft with Haiku", () => {
     await expect(regenerateRecommendationDraft("someone-else", rec.id, "", "")).rejects.toThrow(/not found/);
     await db.update(recommendations).set({ status: "dismissed" }).where(eq(recommendations.id, rec.id));
     await expect(regenerateRecommendationDraft(userId, rec.id, "", "")).rejects.toThrow(/already dismissed/);
+  });
+});
+
+describe("folding follows into replies that were already pending", () => {
+  it("merges older pending follow + reply pairs (any plan), leaving scheduled replies and unmatched follows alone", async () => {
+    const runId = (await db.select().from(recommendations).where(eq(recommendations.planId, planId)))[0].runId;
+    const [game] = await db.insert(games).values({ userId, name: "Test Game" }).returning();
+    const [otherPlan] = await db.insert(plans).values({ userId, kind: "game_marketing", gameId: game.id }).returning(); // e.g. a game plan
+    const base = { userId, accountId, status: "pending" as const };
+    const [oldReply] = await db
+      .insert(recommendations)
+      .values({ ...base, planId, runId, kind: "reply", title: "Old reply", rationale: "", draftText: "hi", target: { externalId: "x1", author: "Pal.Test", data: { id: "x1" } } })
+      .returning();
+    const [oldFollow] = await db
+      .insert(recommendations)
+      .values({ ...base, planId: otherPlan.id, runId, kind: "follow", title: "Old follow", rationale: "Same niche", target: { externalId: "x2", author: "pal.test", authorId: "did:pal" } })
+      .returning();
+    const [scheduledReply] = await db
+      .insert(recommendations)
+      .values({ ...base, planId, runId, status: "scheduled", kind: "reply", title: "Already scheduled", target: { externalId: "y1", author: "busy.test", authorId: "did:busy", data: { id: "y1" } } })
+      .returning();
+    const [lonelyFollow] = await db
+      .insert(recommendations)
+      .values({ ...base, planId, runId, kind: "follow", title: "Follow busy", target: { externalId: "y2", author: "busy.test", authorId: "did:busy" } })
+      .returning();
+
+    expect(await foldPendingFollows(userId)).toBe(1);
+    expect(await foldPendingFollows(userId)).toBe(0); // idempotent
+
+    const byId = async (id: string) => (await db.select().from(recommendations).where(eq(recommendations.id, id)))[0];
+    expect(await byId(oldFollow.id)).toBeUndefined();
+    const reply = await byId(oldReply.id);
+    expect(reply.suggestFollow).toBe(true);
+    expect(reply.target?.authorId).toBe("did:pal"); // filled in from the follow so the follow can run
+    expect(reply.rationale).toBe("Also worth following: Same niche");
+    expect((await byId(scheduledReply.id)).suggestFollow).toBe(false); // never changes an approved reply
+    expect((await byId(lonelyFollow.id)).kind).toBe("follow");
+  });
+
+  it("pairs by author id when both sides have one, else by handle", () => {
+    const platformOf = new Map([["a", "fakesocial"]]);
+    const reply = (id: string, t: Record<string, string>) => ({ id, accountId: "a", kind: "reply", rationale: "", suggestFollow: false, target: { externalId: id, ...t } });
+    const follow = (id: string, t: Record<string, string>, acct = "a") => ({ id, accountId: acct, kind: "follow", rationale: "", suggestFollow: false, target: { externalId: id, ...t } });
+    const merges = planFollowMerges(
+      [
+        reply("r1", { author: "same.handle", authorId: "did:1" }),
+        follow("f1", { author: "same.handle", authorId: "did:2" }), // same handle, different id → not the same person
+        follow("f2", { author: "other", authorId: "did:1" }), // handle changed, same id → same person
+        follow("f3", { author: "same.handle", authorId: "did:1" }, "b"), // other account
+      ],
+      platformOf,
+    );
+    expect(merges.map((m) => [m.followId, m.replyId])).toEqual([["f2", "r1"]]);
   });
 });
