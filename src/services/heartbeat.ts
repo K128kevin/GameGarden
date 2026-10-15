@@ -29,11 +29,19 @@ export async function recordRejectedTick(reason: "missing_secret_env" | "bad_sec
   await put("tick:rejected", { at: new Date().toISOString(), reason });
 }
 
+/**
+ * The external pinger is expected every 30 minutes (hourly also works). Pinging more often keeps
+ * the Neon database awake around the clock and uses up the free plan's compute hours.
+ */
+export const HEARTBEAT_MINUTES = 30;
+/** Warn when the pinger has been silent this long (covers 30- and 60-minute pingers). */
+export const HEARTBEAT_STALE_MINUTES = 75;
+
 export type HeartbeatStatus = {
   lastExternal: Date | null;
   lastVercelCron: Date | null;
   lastRejected: { at: Date; reason: string } | null;
-  /** The frequent (external) pinger has run in the last 20 minutes. */
+  /** The frequent (external) pinger has run recently (see HEARTBEAT_STALE_MINUTES). */
   healthy: boolean;
 };
 
@@ -51,7 +59,7 @@ export async function heartbeatStatus(): Promise<HeartbeatStatus> {
     lastExternal,
     lastVercelCron: date(get("tick:vercel-cron")),
     lastRejected: rejectedAt ? { at: rejectedAt, reason: String(rejected?.reason ?? "bad_secret") } : null,
-    healthy: Boolean(lastExternal && Date.now() - lastExternal.getTime() < 20 * 60_000),
+    healthy: Boolean(lastExternal && Date.now() - lastExternal.getTime() < HEARTBEAT_STALE_MINUTES * 60_000),
   };
 }
 

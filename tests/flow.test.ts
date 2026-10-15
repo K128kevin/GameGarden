@@ -164,6 +164,7 @@ describe("growth plan flow", () => {
     const bad = recs.find((x) => x.title === "Join a conversation")!;
     expect(bad.kind).toBe("engage"); // invalid target downgraded
     expect(bad.suggestedFor!.getTime()).toBeGreaterThan(Date.now()); // invalid time clamped to future
+    expect(bad.suggestedFor!.getTime() % (30 * 60_000)).toBe(0); // lands on :00 or :30, when the heartbeat publishes
 
     const [plan] = await db.select().from(plans).where(eq(plans.id, planId));
     expect(plan.strategy).toContain("Goals");
