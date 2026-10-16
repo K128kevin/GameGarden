@@ -88,8 +88,8 @@ export async function generatePlanUpdate(context: unknown): Promise<{
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     thinking: { type: "adaptive" },
-    // Opus 5.5 defaults to "medium"; planning quality benefits from "high".
-    output_config: { effort: "high", format: betaZodOutputFormat(PlanOutput) },
+    // "medium" (Opus 5.5's default) keeps thinking tokens, and cost, down; "high" thinks longer.
+    output_config: { effort: "medium", format: betaZodOutputFormat(PlanOutput) },
     system: SYSTEM_PROMPT,
     messages: [
       {
