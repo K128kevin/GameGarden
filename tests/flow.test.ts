@@ -233,6 +233,46 @@ describe("growth plan flow", () => {
     expect(again.results.find((r) => r.planId === planId)).toBeUndefined();
   });
 
+  it("keeps the current strategy when the model returns none, and keeps the prompt bounded", async () => {
+    const { generatePlanUpdate } = await import("@/services/ai");
+    const [before] = await db.select().from(plans).where(eq(plans.id, planId));
+    let seen: { plan: { strategyNote?: string } } | undefined;
+    vi.mocked(generatePlanUpdate).mockImplementationOnce(async (ctx) => {
+      seen = ctx as typeof seen;
+      return {
+        model: "mock-model",
+        inputTokens: 80,
+        outputTokens: 20,
+        output: {
+          assessment: "Quiet day.",
+          strategyChanged: false,
+          strategyChangeSummary: "",
+          strategy: "", // unchanged: not re-sent (saves output tokens)
+          focusKeywords: ["cozy games"],
+          focusCommunities: [],
+          completedRefs: [],
+          recommendations: [],
+        },
+      };
+    });
+    const r = await runPlan(planId, { slot: "manual-strategy", trigger: "manual" });
+    expect(r.status).toBe("succeeded");
+    const [after] = await db.select().from(plans).where(eq(plans.id, planId));
+    expect(after.strategy).toBe(before.strategy);
+    expect(after.strategyUpdatedAt?.getTime()).toBe(before.strategyUpdatedAt?.getTime());
+    expect(seen?.plan.strategyNote).toBeUndefined(); // short strategy: no request to condense
+
+    // An overgrown strategy gets a request to condense it.
+    await db.update(plans).set({ strategy: "x".repeat(7000) }).where(eq(plans.id, planId));
+    vi.mocked(generatePlanUpdate).mockImplementationOnce(async (ctx) => {
+      seen = ctx as typeof seen;
+      return { model: "m", inputTokens: 1, outputTokens: 1, output: { assessment: "", strategyChanged: true, strategyChangeSummary: "Condensed", strategy: "## Goals\nShort", focusKeywords: [], focusCommunities: [], completedRefs: [], recommendations: [] } };
+    });
+    await runPlan(planId, { slot: "manual-condense", trigger: "manual" });
+    expect(seen?.plan.strategyNote).toMatch(/Condense/);
+    expect((await db.select().from(plans).where(eq(plans.id, planId)))[0].strategy).toBe("## Goals\nShort");
+  });
+
   it("clears plan history but keeps approved scheduled posts", async () => {
     const keep = await createApprovedAction({
       userId,

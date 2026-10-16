@@ -34,13 +34,15 @@ export const PlanOutput = z.object({
   assessment: z
     .string()
     .describe(
-      "Markdown: what happened since the previous run: metric changes, how recent posts/replies performed, what the user did (incl. manual activity and dismissed/ignored suggestions), and what that teaches us.",
+      "Markdown, under about 250 words: what happened since the previous run: metric changes, how recent posts/replies performed, what the user did (incl. manual activity and dismissed/ignored suggestions), and what that teaches us.",
     ),
   strategyChanged: z.boolean(),
   strategyChangeSummary: z.string().describe("One or two sentences describing what changed in the long-term plan, or empty string."),
   strategy: z
     .string()
-    .describe("The full long-term plan as markdown (returned every time, revised only when evidence warrants)."),
+    .describe(
+      "The full long-term plan as markdown (under about 700 words) when strategyChanged is true or on the first run. Empty string when it is unchanged: GameGarden keeps the current one.",
+    ),
   focusKeywords: z.array(z.string()).describe("3-8 search queries to use for discovering relevant conversations next run"),
   focusCommunities: z.array(z.string()).describe("Subreddits (without r/) or community names to monitor next run; can be empty"),
   completedRefs: z
@@ -57,7 +59,7 @@ Each time you run you receive a JSON snapshot of one growth plan: the user's goa
 
 Your job on each run:
 1. Assess what actually happened since the previous run. Compare metrics against earlier snapshots, look at which posts and replies earned engagement, note what the user did manually, and which suggestions they scheduled, dismissed (read their notes), or ignored. Be concrete and honest; small numbers are normal for small accounts.
-2. Maintain the long-term plan. Return the full strategy as markdown with these sections: Goals & north-star metric; Positioning & voice; Content pillars; Cadence & timing; Communities & people to engage; Current experiments (with what would count as success); Learnings so far. Keep it stable, revise only when the evidence or the user's goals justify it, and say what changed in strategyChangeSummary. On the first run, write it from scratch.
+2. Maintain the long-term plan. Return the full strategy as markdown with these sections: Goals & north-star metric; Positioning & voice; Content pillars; Cadence & timing; Communities & people to engage; Current experiments (with what would count as success); Learnings so far. Keep it stable, revise only when the evidence or the user's goals justify it, and say what changed in strategyChangeSummary. On the first run, write it from scratch. Keep the whole strategy under about 700 words, and keep "Learnings so far" to at most 8 short bullets: fold a new learning into an existing one or replace a weaker one instead of appending. Only return the strategy when it changed; otherwise set strategyChanged to false and return an empty string for strategy.
 3. Recommend the next concrete actions (usually 3 to 8) for roughly the next 12 to 36 hours, consistent with the long-term plan. Prioritise replying to genuine new replies/comments/mentions (use their I# ref as targetRef), thoughtful participation in discovered conversations (D# refs), and well-timed original posts. Include at most one or two non-publishing tasks (content/profile/engage/other) when they matter.
 
 Rules for drafts:
@@ -86,13 +88,13 @@ export async function generatePlanUpdate(context: unknown): Promise<{
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     thinking: { type: "adaptive" },
-    // Opus 5.5 defaults to "medium"; planning quality benefits from "high".
-    output_config: { effort: "high", format: betaZodOutputFormat(PlanOutput) },
+    // "medium" (Opus 5.5's default) keeps thinking tokens, and cost, down; "high" thinks longer.
+    output_config: { effort: "medium", format: betaZodOutputFormat(PlanOutput) },
     system: SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
-        content: `Here is the current snapshot for this growth plan. Produce the updated assessment, strategy, and recommendations.\n\n\`\`\`json\n${JSON.stringify(context, null, 1)}\n\`\`\``,
+        content: `Here is the current snapshot for this growth plan. Produce the updated assessment, strategy, and recommendations.\n\n\`\`\`json\n${JSON.stringify(context)}\n\`\`\``,
       },
     ],
   });
