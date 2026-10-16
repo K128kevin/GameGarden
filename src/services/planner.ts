@@ -38,6 +38,13 @@ const DEFAULT_COMMUNITIES: Record<string, string[]> = {
   reddit: ["IndieDev", "indiegames", "gamedev", "IndieGaming"],
 };
 
+// Context size limits. The strategy carries long-term memory, so the run/suggestion history
+// only needs recent entries; all of these keep each run's prompt from growing over time.
+const PREVIOUS_RUNS_IN_CONTEXT = 4;
+const RECOMMENDATIONS_IN_CONTEXT = 30;
+/** Above this the strategist is asked to condense the strategy (~700 words is plenty). */
+const STRATEGY_SOFT_LIMIT_CHARS = 6000;
+
 /** Never show the strategist conversations older than this, whatever a connector returns. */
 export const MAX_DISCOVERED_AGE_DAYS = 14;
 
@@ -168,11 +175,12 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
           },
         });
       }
+      const handled = ownIds.has(i.externalId) || i.status === "replied" || i.status === "dismissed";
       return {
         ref,
         kind: i.kind,
         author: i.authorHandle,
-        text: truncate(i.text, 400),
+        text: truncate(i.text, handled ? 140 : 400), // already handled: just enough to recognize it
         when: formatDateTime(i.occurredAt, tz),
         newSinceLastRun: i.firstSeenAt > sinceLastRun,
         alreadyRepliedByUser: ownIds.has(i.externalId) || i.status === "replied",
@@ -242,7 +250,7 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
     .from(planRuns)
     .where(and(eq(planRuns.planId, plan.id), eq(planRuns.status, "succeeded")))
     .orderBy(desc(planRuns.startedAt))
-    .limit(8);
+    .limit(PREVIOUS_RUNS_IN_CONTEXT);
 
   // Recommendation history and outcomes.
   const recs = await db
@@ -250,7 +258,7 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
     .from(recommendations)
     .where(eq(recommendations.planId, plan.id))
     .orderBy(desc(recommendations.createdAt))
-    .limit(50);
+    .limit(RECOMMENDATIONS_IN_CONTEXT);
   const pendingRefs = new Map<string, string>();
   let rCount = 0;
   const recHistory = recs.map((r) => {
@@ -326,6 +334,10 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
       type: plan.kind === "account_growth" ? "Grow this social media account" : "Market this game across its linked accounts",
       userGoals: plan.goals || "(none given — infer sensible goals for an indie game developer)",
       currentLongTermStrategy: plan.strategy || "(none yet — this is the first run; write it)",
+      strategyNote:
+        plan.strategy.length > STRATEGY_SOFT_LIMIT_CHARS
+          ? "This strategy has grown longer than it needs to be. Condense it to under about 700 words this run (merge the learnings) and return it."
+          : undefined,
       strategyLastUpdated: plan.strategyUpdatedAt ? formatDateTime(plan.strategyUpdatedAt, tz) : null,
       focusKeywords: plan.focusKeywords,
       focusCommunities: plan.focusCommunities,
@@ -336,7 +348,7 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
     previousRunsNewestFirst: runs.map((r) => ({
       when: formatDateTime(r.startedAt, tz),
       run: slotLabelFromId(r.slot),
-      assessment: truncate(r.assessment, 1200),
+      assessment: truncate(r.assessment, 700),
       strategyChange: r.strategyChangeSummary || undefined,
     })),
     recommendationHistoryNewestFirst: recHistory,
@@ -424,11 +436,13 @@ async function persistOutput(
   // Follows for people we also suggest replying to ride along with that reply.
   const merged = await foldPendingFollows(plan.userId);
 
-  const strategyChanged = output.strategyChanged || !plan.strategy;
+  // The model returns the strategy only when it changed (saves output tokens); otherwise keep ours.
+  const newStrategy = output.strategy.trim();
+  const strategyChanged = Boolean(newStrategy) && (output.strategyChanged || !plan.strategy);
   await db
     .update(plans)
     .set({
-      strategy: output.strategy,
+      strategy: newStrategy || plan.strategy,
       strategyUpdatedAt: strategyChanged ? now : plan.strategyUpdatedAt,
       focusKeywords: output.focusKeywords.slice(0, 10),
       focusCommunities: output.focusCommunities.map(normalizeSubreddit).filter(Boolean).slice(0, 10),
