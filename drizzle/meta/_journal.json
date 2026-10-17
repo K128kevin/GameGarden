@@ -36,6 +36,13 @@
       "when": 1792030760929,
       "tag": "0004_suggest_follow",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792254185038,
+      "tag": "0005_followed_accounts",
+      "breakpoints": true
     }
   ]
 }

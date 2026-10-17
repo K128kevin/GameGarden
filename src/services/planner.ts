@@ -29,10 +29,11 @@ import { accountContext, syncAccount } from "./accounts";
 import { generatePlanUpdate, type PlanOutputT } from "./ai";
 import { repliesInFlight } from "./inbox";
 import { foldPendingFollows } from "./follow-merge";
+import { followedLookup } from "./following";
 import { HEARTBEAT_MINUTES } from "./heartbeat";
 import { refreshStoreData } from "./games";
 
-type RefTarget = { accountId: string; target: RecommendationTarget };
+type RefTarget = { accountId: string; target: RecommendationTarget; youFollow?: boolean };
 
 const DEFAULT_COMMUNITIES: Record<string, string[]> = {
   reddit: ["IndieDev", "indiegames", "gamedev", "IndieGaming"],
@@ -99,6 +100,18 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
     : [];
   const recByExternal = new Map(appActions.filter((a) => a.resultExternalId).map((a) => [a.resultExternalId!, a.recTitle]));
 
+  // People the user already follows: no follow suggestions or "also follow" for them.
+  const recentInbound = accts.length
+    ? await db
+        .select({ accountId: interactions.accountId, authorId: interactions.authorId, author: interactions.authorHandle })
+        .from(interactions)
+        .where(and(inArray(interactions.accountId, accts.map((a) => a.id)), gt(interactions.occurredAt, new Date(Date.now() - 5 * 86_400_000))))
+    : [];
+  const isFollowed = await followedLookup([
+    ...recentInbound.map((i) => ({ accountId: i.accountId, target: { authorId: i.authorId, author: i.author } })),
+    ...accts.flatMap((a) => (discovered.get(a.id) ?? []).map((d) => ({ accountId: a.id, target: { authorId: d.authorId, author: d.authorHandle } }))),
+  ]);
+
   let pCount = 0;
   let iCount = 0;
   let dCount = 0;
@@ -161,10 +174,12 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
     const interactionsCtx = inbound.map((i) => {
       const ref = `I${++iCount}`;
       const replyable = Boolean(i.replyTarget && connector.capabilities.reply);
-      const canFollow = Boolean((i.authorId || i.authorHandle) && connector.capabilities.follow);
+      const youFollow = isFollowed(a.id, { authorId: i.authorId, author: i.authorHandle });
+      const canFollow = Boolean((i.authorId || i.authorHandle) && connector.capabilities.follow) && !youFollow;
       if (replyable || canFollow) {
         refs.set(ref, {
           accountId: a.id,
+          youFollow,
           target: {
             externalId: i.externalId,
             url: i.url,
@@ -188,6 +203,7 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
           i.status === "dismissed" ? "user dismissed: no reply needed" : inFlight.has(i.externalId) ? "reply already scheduled" : undefined,
         replyable,
         canFollow: canFollow || undefined,
+        youFollow: youFollow || undefined,
       };
     });
     // Aggregate likes/follows instead of listing each.
@@ -198,10 +214,12 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
     const discoveredCtx = (discovered.get(a.id) ?? []).map((d) => {
       const ref = `D${++dCount}`;
       const replyable = Boolean(d.replyTarget && connector.capabilities.reply);
-      const canFollow = Boolean((d.authorId || d.authorHandle) && connector.capabilities.follow);
+      const youFollow = isFollowed(a.id, { authorId: d.authorId, author: d.authorHandle });
+      const canFollow = Boolean((d.authorId || d.authorHandle) && connector.capabilities.follow) && !youFollow;
       if (replyable || canFollow) {
         refs.set(ref, {
           accountId: a.id,
+          youFollow,
           target: {
             externalId: d.externalId,
             url: d.url,
@@ -224,6 +242,7 @@ async function buildContext(plan: Plan, accts: SocialAccount[], game: Game | nul
         matchedQuery: d.matchedQuery,
         replyable: replyable || undefined,
         canFollow: canFollow || undefined,
+        youFollow: youFollow || undefined,
       };
     });
 
@@ -408,6 +427,7 @@ async function persistOutput(
     } else if (kind === "follow") {
       const ref = built.refs.get(r.targetRef);
       const who = ref?.target.authorId || ref?.target.author;
+      if (ref?.youFollow) continue; // already following: nothing to do
       if (!ref || (acct && ref.accountId !== acct.id) || !who || !connector?.capabilities.follow) kind = "engage";
       else target = ref.target;
     }

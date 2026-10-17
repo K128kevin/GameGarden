@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { activityLog, games, planRuns, plans, recommendations, scheduledActions, socialAccounts } from "@/db/schema";
 import { getUserSettings, requireUser } from "@/lib/session";
 import { foldPendingFollows } from "@/services/follow-merge";
+import { followedLookup } from "@/services/following";
 import { formatDateTime, formatRelative, msFromNow, nextPlanSlot, slotLabelFromId } from "@/lib/time";
 import { toRecView } from "@/lib/views";
 import { listInbox } from "@/services/inbox";
@@ -37,6 +38,7 @@ export default async function Dashboard() {
   ]);
   const inbox = await listInbox(user.id, 20);
   const acctMap = new Map(accts.map((a) => [a.id, a]));
+  const isFollowed = await followedLookup(pendingRecs);
   const gameNames = new Map(gameRows.map((g) => [g.id, g.name]));
   const updatedPlans = planRows.filter((p) => p.lastRunAt && (!p.lastViewedAt || p.lastRunAt > p.lastViewedAt));
   const latestRuns = updatedPlans.length
@@ -131,7 +133,7 @@ export default async function Dashboard() {
             </Link>
           </div>
           {pendingRecs.length ? (
-            pendingRecs.map((r) => <RecommendationCard key={r.id} rec={toRecView(r, acctMap, tz, gameNames)} />)
+            pendingRecs.map((r) => <RecommendationCard key={r.id} rec={toRecView(r, acctMap, tz, gameNames, isFollowed)} />)
           ) : (
             <EmptyState title="No pending recommendations">
               {activePlans.length

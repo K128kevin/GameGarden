@@ -35,6 +35,8 @@ export type RecView = {
   /** The target's author can be followed from GameGarden. */
   followable: boolean;
   followLabel: string;
+  /** You already follow the person this is about (no follow options shown). */
+  alreadyFollowing: boolean;
   /** The planner also recommends following the person this replies to. */
   suggestFollow: boolean;
 };
@@ -121,6 +123,11 @@ export function RecommendationCard({ rec }: { rec: RecView }) {
         </div>
       )}
 
+      {rec.kind === "follow" && open && rec.alreadyFollowing && (
+        <p className="text-sm text-zinc-400">
+          You already {rec.followLabel === "Subscribe" ? "subscribe to" : "follow"} {rec.target?.author ? `@${rec.target.author}` : "them"}.
+        </p>
+      )}
       {rec.kind === "follow" && open && rec.followable && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <ActionButton

@@ -5,6 +5,7 @@ import { activityLog, gameAccounts, games, planRuns, plans, recommendations, soc
 import { clearPlanHistoryAction, runPlanNow, updatePlanSettings } from "@/app/actions";
 import { getUserSettings, requireUser } from "@/lib/session";
 import { foldPendingFollows } from "@/services/follow-merge";
+import { followedLookup } from "@/services/following";
 import { isPlanUpdated, planTitle } from "@/lib/plan-names";
 import { formatDateTime, formatRelative, nextPlanSlot, slotLabelFromId } from "@/lib/time";
 import { toRecView } from "@/lib/views";
@@ -43,6 +44,7 @@ export default async function PlanPage({ params }: PageProps<"/plans/[id]">) {
   const updated = isPlanUpdated(plan);
   const pending = recs.filter((r) => r.status === "pending").sort((a, b) => (a.suggestedFor?.getTime() ?? 0) - (b.suggestedFor?.getTime() ?? 0));
   const inFlight = recs.filter((r) => r.runId === latestOk?.id && r.status !== "pending");
+  const isFollowed = await followedLookup([...pending, ...inFlight]);
   const recsByRun = new Map<string, typeof recs>();
   for (const r of recs) recsByRun.set(r.runId, [...(recsByRun.get(r.runId) ?? []), r]);
   const newCount = latestOk ? (recsByRun.get(latestOk.id)?.length ?? 0) : 0;
@@ -129,13 +131,13 @@ export default async function PlanPage({ params }: PageProps<"/plans/[id]">) {
               </EmptyState>
             )}
             {pending.map((r) => (
-              <RecommendationCard key={r.id} rec={toRecView(r, acctMap, tz, gameNames)} />
+              <RecommendationCard key={r.id} rec={toRecView(r, acctMap, tz, gameNames, isFollowed)} />
             ))}
             {inFlight.length > 0 && (
               <>
                 <h3 className="pt-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Handled from the latest run</h3>
                 {inFlight.map((r) => (
-                  <RecommendationCard key={r.id} rec={toRecView(r, acctMap, tz, gameNames)} />
+                  <RecommendationCard key={r.id} rec={toRecView(r, acctMap, tz, gameNames, isFollowed)} />
                 ))}
               </>
             )}

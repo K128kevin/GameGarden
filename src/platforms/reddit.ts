@@ -183,6 +183,25 @@ export const reddit: PlatformConnector = {
     return l.data.children.filter((c) => c.kind === "t1" || c.kind === "t3").map(toOwn);
   },
 
+  async fetchFollowing(ctx) {
+    type Sub = { display_name: string; subreddit_type?: string };
+    const ids: string[] = [];
+    let after = "";
+    for (let page = 0; page < 20; page++) {
+      const l = await rd<Listing<Sub> & { data: { after?: string | null } }>(
+        ctx,
+        `/subreddits/mine/subscriber?limit=100${after ? `&after=${after}` : ""}&raw_json=1`,
+      );
+      for (const c of l.data.children) {
+        const name = c.data.display_name;
+        if (c.data.subreddit_type === "user" || name.startsWith("u_")) ids.push(name.replace(/^u_/, ""));
+      }
+      after = l.data.after ?? "";
+      if (!after) return { ids, complete: true };
+    }
+    return { ids, complete: false };
+  },
+
   async fetchInteractions(ctx, { limit }) {
     type Msg = { name: string; author: string; body: string; context?: string; created_utc: number; type?: string; was_comment: boolean; parent_id?: string; subreddit?: string };
     const l = await rd<Listing<Msg>>(ctx, `/message/inbox?limit=${Math.min(limit, 100)}&raw_json=1`);
