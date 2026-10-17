@@ -450,3 +450,17 @@ export const systemState = pgTable("system_state", {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+/** Who each connected account already follows (synced from the platform, plus follows made in GameGarden). */
+export const followedAccounts = pgTable(
+  "followed_accounts",
+  {
+    accountId: text("account_id")
+      .notNull()
+      .references(() => socialAccounts.id, { onDelete: "cascade" }),
+    /** Lower-cased platform id of the followed person: Bluesky DID, YouTube channel id, Reddit username. */
+    authorKey: text("author_key").notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.authorKey] })],
+);

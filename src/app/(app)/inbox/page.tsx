@@ -4,6 +4,7 @@ import { socialAccounts } from "@/db/schema";
 import { checkInboxNow } from "@/app/actions";
 import { getUserSettings, requireUser } from "@/lib/session";
 import { foldPendingFollows } from "@/services/follow-merge";
+import { followedLookup } from "@/services/following";
 import { formatDateTime, formatRelative, msFromNow, toLocalInput } from "@/lib/time";
 import { replyModelLabel } from "@/lib/reply-models";
 import { getConnector } from "@/platforms/registry";
@@ -21,6 +22,9 @@ export default async function InboxPage() {
   await foldPendingFollows(user.id); // also merges suggestions made before follow folding existed
   const { timezone: tz } = await getUserSettings(user.id);
   const entries = await listInbox(user.id);
+  const isFollowed = await followedLookup(
+    entries.map((e) => ({ accountId: e.account.id, target: { authorId: e.interaction.authorId, author: e.interaction.authorHandle } })),
+  );
   const [acctInfo] = await db
     .select({ n: sql<number>`count(*)::int`, oldest: sql<Date | null>`min(${socialAccounts.inboundCheckedAt})` })
     .from(socialAccounts)
@@ -81,11 +85,12 @@ export default async function InboxPage() {
                   planDraft: e.planRec?.draftText ?? null,
                   defaultWhen,
                   likeable: canLike(e.account.platform, { externalId: e.interaction.externalId, data: e.interaction.replyTarget }),
-                  followable: canFollow(e.account.platform, {
-                    externalId: e.interaction.externalId,
-                    author: e.interaction.authorHandle,
-                    authorId: e.interaction.authorId,
-                  }),
+                  followable:
+                    canFollow(e.account.platform, {
+                      externalId: e.interaction.externalId,
+                      author: e.interaction.authorHandle,
+                      authorId: e.interaction.authorId,
+                    }) && !isFollowed(e.account.id, { authorId: e.interaction.authorId, author: e.interaction.authorHandle }),
                   followLabel: followLabel(e.account.platform),
                   suggestFollow: e.planRec?.suggestFollow ?? false,
                 }}

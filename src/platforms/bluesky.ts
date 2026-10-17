@@ -196,6 +196,19 @@ export const bluesky: PlatformConnector = {
     return out;
   },
 
+  async fetchFollowing(ctx) {
+    const agent = await agentFor(ctx);
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 50; page++) {
+      const { data } = await agent.app.bsky.graph.getFollows({ actor: ctx.account.externalId, limit: 100, cursor });
+      ids.push(...data.follows.map((f) => f.did));
+      cursor = data.cursor;
+      if (!cursor || !data.follows.length) return { ids, complete: true };
+    }
+    return { ids, complete: false };
+  },
+
   async findReplied(ctx, externalIds) {
     const agent = await agentFor(ctx);
     const me = ctx.account.externalId;

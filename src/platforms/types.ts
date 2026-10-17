@@ -159,6 +159,11 @@ export interface PlatformConnector {
    * sync missed. Best-effort: return what could be checked.
    */
   findReplied?(ctx: AccountContext, externalIds: string[]): Promise<string[]>;
+  /**
+   * Everyone this account follows/subscribes to, as platform ids (the same ids used for authorId).
+   * `complete` is false when the list was cut short (very large follow lists).
+   */
+  fetchFollowing?(ctx: AccountContext): Promise<{ ids: string[]; complete: boolean }>;
   /** Like/upvote the post or comment described by a reply target (capabilities.like). */
   like?(ctx: AccountContext, target: RecommendationTarget): Promise<{ already?: boolean }>;
   /** Follow/subscribe to a user by platform id and/or handle (capabilities.follow). */

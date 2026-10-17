@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { decryptJson, encryptJson } from "@/lib/crypto";
 import { getConnector } from "@/platforms/registry";
+import { syncFollowing } from "./following";
 import { INBOX_WINDOW_DAYS, REPLYABLE_KINDS } from "./inbox";
 import {
   PlatformError,
@@ -132,6 +133,8 @@ export async function syncAccount(acct: SocialAccount): Promise<SyncResult> {
 
     const newInteractions = await upsertInteractions(acct.id, await connector.fetchInteractions(ctx, { limit: 50 }));
     await markAnsweredInteractions(acct);
+    // Who you already follow (hides "Also follow" and follow suggestions for them). Best-effort.
+    await syncFollowing(acct, ctx).catch(() => null);
 
     await db
       .update(socialAccounts)

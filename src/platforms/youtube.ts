@@ -281,6 +281,20 @@ export const youtube: PlatformConnector = {
     throw new PlatformError("Missing YouTube reply target.");
   },
 
+  async fetchFollowing(ctx) {
+    type Subs = { items: { snippet: { resourceId: { channelId?: string } } }[]; nextPageToken?: string };
+    const ids: string[] = [];
+    let pageToken = "";
+    for (let page = 0; page < 20; page++) {
+      // 1 quota unit per page of 50.
+      const r = await yt<Subs>(ctx, "subscriptions", { part: "snippet", mine: "true", maxResults: 50, ...(pageToken ? { pageToken } : {}) });
+      ids.push(...(r.items.map((i) => i.snippet.resourceId.channelId).filter(Boolean) as string[]));
+      pageToken = r.nextPageToken ?? "";
+      if (!pageToken) return { ids, complete: true };
+    }
+    return { ids, complete: false };
+  },
+
   async follow(ctx, who) {
     const channelId = who.id?.startsWith("UC") ? who.id : null;
     if (!channelId) throw new PlatformError("Don't know which YouTube channel to subscribe to.");

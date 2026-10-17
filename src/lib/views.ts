@@ -1,6 +1,7 @@
 import type { Recommendation, SocialAccount } from "@/db/schema";
 import { findConnector } from "@/platforms/registry";
 import type { RecView } from "@/components/recommendation-card";
+import type { IsFollowed } from "@/services/following";
 import { canFollow, canLike, followLabel } from "@/services/social-actions";
 import { formatDateTime, toLocalInput } from "./time";
 
@@ -9,7 +10,9 @@ export function toRecView(
   accounts: Map<string, SocialAccount>,
   tz: string,
   gameNames?: Map<string, string>,
+  isFollowed?: IsFollowed,
 ): RecView {
+  const alreadyFollowing = Boolean(isFollowed?.(r.accountId, r.target));
   const acct = r.accountId ? accounts.get(r.accountId) : undefined;
   const c = acct ? findConnector(acct.platform) : undefined;
   return {
@@ -36,7 +39,8 @@ export function toRecView(
         : null,
     gameName: r.gameId ? (gameNames?.get(r.gameId) ?? null) : null,
     likeable: Boolean(acct && r.kind === "reply" && canLike(acct.platform, r.target)),
-    followable: Boolean(acct && (r.kind === "reply" || r.kind === "follow") && canFollow(acct.platform, r.target)),
+    followable: Boolean(acct && (r.kind === "reply" || r.kind === "follow") && canFollow(acct.platform, r.target) && !alreadyFollowing),
+    alreadyFollowing,
     followLabel: acct ? followLabel(acct.platform) : "Follow",
     suggestFollow: r.suggestFollow,
   };

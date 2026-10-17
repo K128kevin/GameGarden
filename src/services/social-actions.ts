@@ -1,6 +1,7 @@
 import type { RecommendationTarget, SocialAccount } from "@/db/schema";
 import { getConnector } from "@/platforms/registry";
 import { accountContext } from "./accounts";
+import { markFollowed } from "./following";
 
 /**
  * Like and follow, run only on explicit user action (a Follow button click, or
@@ -31,5 +32,7 @@ export async function likeTarget(acct: SocialAccount, target: RecommendationTarg
 export async function followAuthor(acct: SocialAccount, target: RecommendationTarget) {
   const c = getConnector(acct.platform);
   if (!canFollow(acct.platform, target)) throw new Error(`Can't ${followLabel(acct.platform).toLowerCase()} this account from GameGarden.`);
-  return c.follow!(accountContext(acct), { id: target.authorId ?? null, handle: target.author ?? null });
+  const r = await c.follow!(accountContext(acct), { id: target.authorId ?? null, handle: target.author ?? null });
+  await markFollowed(acct.id, target);
+  return r;
 }
